@@ -2163,7 +2163,8 @@ def register_handlers():
     def cmd_color(message):
         name, code = random.choice(COLORS)
         bot.reply_to(message, f"🎨 Цвет: {name}\nHEX: {code}")
-        @bot.message_handler(commands=['toast'])
+        
+    @bot.message_handler(commands=['toast'])
     def cmd_toast(message):
         bot.reply_to(message, f"🥂 Тост: {random.choice(TOASTS)}")
 
