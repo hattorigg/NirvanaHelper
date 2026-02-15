@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "✅ Бот работает!")
+    bot.send_message(message.chat.id, "✅ Бот работает на Render!")
     print(f"Отправил ответ пользователю {message.chat.id}")
 
 @app.route('/' + TOKEN, methods=['POST'])
@@ -20,13 +20,21 @@ def webhook():
 
 @app.route('/')
 def index():
-    return 'Бот работает!', 200
+    return 'Бот работает на Render!', 200
+
+@app.route('/ping')
+def ping():
+    return 'pong', 200
 
 def set_webhook():
-    url = f'https://Hattori.pythonanywhere.com/{TOKEN}'
+    url = f'https://nirvanahelper.onrender.com/{TOKEN}'
     bot.remove_webhook()
     time.sleep(1)
     bot.set_webhook(url=url)
-    print("Вебхук установлен")
+    print(f"Вебхук установлен на {url}")
 
 set_webhook()
+
+# Бесконечный цикл, чтобы Render не убивал процесс
+while True:
+    time.sleep(60)
