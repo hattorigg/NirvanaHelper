@@ -2149,12 +2149,10 @@ def register_handlers():
         bot.reply_to(message, random.choice(greetings))
 
     # ========== ТРИГГЕР НА КОМАНДЫ ==========
-COMMANDS_TRIGGERS = [
-    "хелп", "/хелп", "help", "/help",
+    COMMANDS_TRIGGERS = ["хелп", "/хелп", "help", "/help",
     "скиллс", "скилс", "скилы", "скиллы",
     "хат команды",
-    "что ты умеешь", "твои навыки", "твои возможности"
-]
+    "что ты умеешь", "твои навыки", "твои возможности"]
 
     @bot.message_handler(func=lambda message: message.text.lower() in COMMANDS_TRIGGERS)
     def show_commands(message):
