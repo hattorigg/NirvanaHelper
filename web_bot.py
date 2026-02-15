@@ -35,6 +35,7 @@ def set_webhook():
 
 set_webhook()
 
-# Бесконечный цикл, чтобы Render не убивал процесс
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    # Render сам даёт порт через переменную окружения
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
