@@ -2274,6 +2274,40 @@ def register_handlers():
                 
 register_handlers()
 
+# ========== НОВЫЙ БЛОК С РАСПИСАНИЕМ ==========
+def run_schedule():
+    """Запускает все запланированные задачи каждые 30 секунд"""
+    last_checked_day = None
+    
+    while True:
+        try:
+            schedule.run_pending()
+            
+            now = datetime.now()
+            current_day = now.strftime('%Y-%m-%d')
+            
+            # Запасной механизм для смены названия (если основное расписание не сработало)
+            if last_checked_day != current_day:
+                if now.hour == 9 and now.minute < 5:  # В промежутке 9:00-9:05
+                    print(f"🔄 Принудительная смена названия на {current_day}")
+                    update_chat_title()
+                    last_checked_day = current_day
+            
+        except Exception as e:
+            print(f"❌ Ошибка в планировщике: {e}")
+        
+        time.sleep(30)
+
+# Запускаем поток
+schedule_thread = threading.Thread(target=run_schedule, daemon=True)
+schedule_thread.start()
+
+# Явно добавляем все задачи
+schedule.every().day.at("08:00").do(send_morning_greeting)
+schedule.every().day.at("09:00").do(send_daily_meme)
+schedule.every().day.at("09:00").do(update_chat_title)
+schedule.every().day.at("23:00").do(send_evening_greeting)
+
 # ========== ВЕБХУК И ЗАПУСК ==========
 @app.route('/' + TOKEN, methods=['POST'])
 def webhook():
