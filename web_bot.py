@@ -3610,12 +3610,12 @@ def query_text(query):
             pass
 # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
 
-     # ========== ЛИЧНАЯ РАССЫЛКА (ПРИОРИТЕТ) ==========
+        # ========== ЛИЧНАЯ РАССЫЛКА (СУПЕР-ПРИОРИТЕТ) ==========
     YOUR_USER_ID = 6001013593
     
-    # Эта команда будет обрабатываться раньше других
-    @bot.message_handler(commands=['say'])
-    def cmd_say(message):
+    # Перехватываем ВСЕ сообщения, начинающиеся с /say
+    @bot.message_handler(func=lambda message: message.text and message.text.startswith('/say'))
+    def cmd_say_priority(message):
         # Проверяем, что команда от тебя
         if message.from_user.id != YOUR_USER_ID:
             bot.reply_to(message, "❌ Эта команда только для создателя")
@@ -3639,7 +3639,8 @@ def query_text(query):
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
         
-        # ВАЖНО: здесь нет return, но команда уже обработана
+        # ВАЖНО: возвращаем True, чтобы другие обработчики не трогали это сообщение
+        return True
                 
 register_handlers()
 
