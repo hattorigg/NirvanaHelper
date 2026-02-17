@@ -3610,11 +3610,26 @@ def query_text(query):
             pass
 # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
 
-# ========== МАКСИМАЛЬНО ПРОСТАЯ КОМАНДА ==========
+# ========== КОМАНДА SAY (С ОТПРАВКОЙ В ЧАТ) ==========
 @bot.message_handler(commands=['say'])
-def cmd_say_simple(message):
-    bot.send_message(message.chat.id, "✅ Команда /say работает!")
-    print(f"✅ Команда /say вызвана пользователем {message.from_user.id}")
+def cmd_say(message):
+    # Проверяем, что команда в личке
+    if message.chat.type != 'private':
+        bot.reply_to(message, "❌ Команда работает только в личных сообщениях")
+        return
+    
+    # Получаем текст после /say
+    text = message.text.replace('/say', '', 1).strip()
+    if not text:
+        bot.reply_to(message, "❌ Напиши текст после /say")
+        return
+    
+    # Отправляем в чат Nirvana
+    try:
+        bot.send_message(CHAT_ID, text)
+        bot.reply_to(message, "✅ Сообщение отправлено в чат!")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ошибка при отправке: {e}")
                 
 register_handlers()
 
