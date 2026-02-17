@@ -2342,19 +2342,18 @@ def query_text(query):
             except:
                 pass
 
-        # 2. Магический шар
-        if "шар" in user_input and "?" in user_input:
+        # 2. Магический шар (упрощённо)
+        if "шар" in user_input:
             ball_answer = random.choice(BALL_ANSWERS)
             result_id += 1
             results.append(telebot.types.InlineQueryResultArticle(
                 id=str(result_id),
                 title=f"🎱 {ball_answer}",
-                description="Ответ магического шара",
+                description="Ответ магического шара (просто на слово 'шар')",
                 input_message_content=telebot.types.InputTextMessageContent(
-                    f"🎱 {ball_answer}"
-                )
-            ))
-
+                f"🎱 {ball_answer}"
+        )
+    ))
         # 3. Монетка
         if any(word in user_input for word in ["монетка", "орел", "решка", "подбрось"]):
             coin_result = random.choice(["🪙 Орёл!", "🪙 Решка!"])
