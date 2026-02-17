@@ -3610,37 +3610,11 @@ def query_text(query):
             pass
 # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
 
-        # ========== ЛИЧНАЯ РАССЫЛКА (СУПЕР-ПРИОРИТЕТ) ==========
-    YOUR_USER_ID = 6001013593
-    
-    # Перехватываем ВСЕ сообщения, начинающиеся с /say
-    @bot.message_handler(func=lambda message: message.text and message.text.startswith('/say'))
-    def cmd_say_priority(message):
-        # Проверяем, что команда от тебя
-        if message.from_user.id != YOUR_USER_ID:
-            bot.reply_to(message, "❌ Эта команда только для создателя")
-            return
-        
-        # Проверяем, что в личке
-        if message.chat.type != 'private':
-            bot.reply_to(message, "❌ Команда работает только в личных сообщениях")
-            return
-        
-        # Получаем текст (удаляем /say из начала)
-        text = message.text.replace('/say', '', 1).strip()
-        if not text:
-            bot.reply_to(message, "❌ Напиши текст после /say")
-            return
-        
-        # Отправляем в чат
-        try:
-            bot.send_message(CHAT_ID, text)
-            bot.reply_to(message, "✅ Сообщение отправлено в чат!")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-        
-        # ВАЖНО: возвращаем True, чтобы другие обработчики не трогали это сообщение
-        return True
+# ========== МАКСИМАЛЬНО ПРОСТАЯ КОМАНДА ==========
+@bot.message_handler(commands=['say'])
+def cmd_say_simple(message):
+    bot.send_message(message.chat.id, "✅ Команда /say работает!")
+    print(f"✅ Команда /say вызвана пользователем {message.from_user.id}")
                 
 register_handlers()
 
