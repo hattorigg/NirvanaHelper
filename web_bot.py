@@ -2604,7 +2604,7 @@ def register_handlers():
     @bot.message_handler(commands=['smell'])
     def cmd_smell(message):
         smell = random.choice(SMELLS)
-        bot.reply_to(message, f👃 Сегодня пахнет: {smell}")
+        bot.reply_to(message, f"👃 Сегодня пахнет: {smell}")
     
     # 2. /taste — вкус дня
     TASTES = [
