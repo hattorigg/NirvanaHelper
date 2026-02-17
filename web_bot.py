@@ -3610,16 +3610,23 @@ def query_text(query):
             pass
 # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
 
-# ========== КОМАНДА SAY (С ОТПРАВКОЙ В ЧАТ) ==========
-@bot.message_handler(commands=['say'])
+# ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ ТЕБЯ) ==========
+YOUR_USER_ID = 6001013593  # 👈 твой ID
+
+@bot.message_handler(func=lambda message: message.text and message.text.lower().startswith('/say'))
 def cmd_say(message):
+    # Проверяем, что команда от тебя
+    if message.from_user.id != YOUR_USER_ID:
+        bot.reply_to(message, "❌ Эта команда только для создателя")
+        return
+    
     # Проверяем, что команда в личке
     if message.chat.type != 'private':
         bot.reply_to(message, "❌ Команда работает только в личных сообщениях")
         return
     
     # Получаем текст после /say
-    text = message.text.replace('/say', '', 1).strip()
+    text = message.text[4:].strip()
     if not text:
         bot.reply_to(message, "❌ Напиши текст после /say")
         return
