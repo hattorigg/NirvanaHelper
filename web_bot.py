@@ -1998,6 +1998,10 @@ HISTORICAL_FACTS = [
 ]
 # ========== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ ==========
 def register_handlers():
+
+    @bot.message_handler(commands=['ррр'])
+    def cmd_rrr(message):
+        bot.reply_to(message, "🦁 Р-р-р! Блок жив!")
     
     @bot.message_handler(commands=['start'])
     def cmd_start(message):
@@ -3471,8 +3475,6 @@ def send_evening_greeting():
     except Exception as e:
         print(f"❌ Ошибка вечернего приветствия: {e}")
 # ====================================================
-
-
     # ========== RP КОМАНДЫ (МЕГАБЛОК) ==========
     
     def get_target_name(message):
@@ -3483,10 +3485,6 @@ def send_evening_greeting():
             return message.text.split()[1]
         else:
             return "воздух"
-
-    @bot.message_handler(commands=['ррр'])
-    def cmd_rrr(message):
-        bot.reply_to(message, "🦁 Р-р-р! RP-блок жив!")
     
     # ==================== УЮТНЫЕ / ТЁПЛЫЕ ====================
     
@@ -4067,7 +4065,6 @@ def send_evening_greeting():
         bot.reply_to(message, f"{phrase}")
     
     # ========== КОНЕЦ RP-БЛОКА ==========
-
         # ========== ИНЛАЙН-РЕЖИМ (С РП) ==========
     @bot.inline_handler(func=lambda query: len(query.query) > 0)
     def query_text(query):
@@ -4314,8 +4311,6 @@ def send_evening_greeting():
             except:
                 pass
     # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
-
-
 # ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ ТЕБЯ) ==========
 YOUR_USER_ID = 6001013593  # 👈 твой ID
 
