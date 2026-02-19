@@ -4289,7 +4289,8 @@ def send_evening_greeting():
         target = get_target_name(message)
         phrase = random.choice(SHARE_LIGHT_PHRASES).format(target=target)
         bot.reply_to(message, f"{message.from_user.first_name} {phrase}")
-        @bot.message_handler(commands=['обнять_душой'])
+        
+    @bot.message_handler(commands=['обнять_душой'])
     def cmd_hug_soul(message):
         target = get_target_name(message)
         phrase = random.choice(HUG_SOUL_PHRASES).format(target=target)
