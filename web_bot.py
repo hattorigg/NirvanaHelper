@@ -3472,252 +3472,6 @@ def send_evening_greeting():
         print(f"❌ Ошибка вечернего приветствия: {e}")
 # ====================================================
 
-        # ========== ИНЛАЙН-РЕЖИМ (С РП) ==========
-    @bot.inline_handler(func=lambda query: len(query.query) > 0)
-    def query_text(query):
-        try:
-            user_input = query.query.lower().strip()
-            results = []
-            result_id = 0
-    
-            # 1. Калькулятор
-            if any(op in user_input for op in '+-*/') and re.match(r'^[0-9+\-*/().\s]+$', user_input):
-                try:
-                    calc_result = safe_calculate(user_input)
-                    if calc_result:
-                        result_id += 1
-                        results.append(telebot.types.InlineQueryResultArticle(
-                            id=str(result_id),
-                            title=f"🧮 {user_input} = {calc_result}",
-                            description="Посчитать выражение",
-                            input_message_content=telebot.types.InputTextMessageContent(
-                                f"🧮 {user_input} = {calc_result}"
-                            )
-                        ))
-                except:
-                    pass
-    
-            # 2. Магический шар (упрощённо, без проверки на ?)
-            if "шар" in user_input:
-                ball_answer = random.choice(BALL_ANSWERS)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title=f"🎱 {ball_answer}",
-                    description="Ответ магического шара",
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🎱 {ball_answer}"
-                    )
-                ))
-    
-            # 3. Монетка
-            if any(word in user_input for word in ["монетка", "орел", "решка", "подбрось"]):
-                coin_result = random.choice(["🪙 Орёл!", "🪙 Решка!"])
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title=coin_result,
-                    description="Подбросить монетку",
-                    input_message_content=telebot.types.InputTextMessageContent(coin_result)
-                ))
-    
-            # 4. Случайное число
-            if "рандом" in user_input or "число" in user_input:
-                numbers = [int(w) for w in user_input.split() if w.isdigit()]
-                if len(numbers) >= 2:
-                    num_result = random.randint(min(numbers[0], numbers[1]), max(numbers[0], numbers[1]))
-                    title_text = f"🎲 Число от {min(numbers[0], numbers[1])} до {max(numbers[0], numbers[1])}"
-                    desc_text = f"от {min(numbers[0], numbers[1])} до {max(numbers[0], numbers[1])}"
-                elif len(numbers) == 1:
-                    num_result = random.randint(1, numbers[0])
-                    title_text = f"🎲 Число от 1 до {numbers[0]}"
-                    desc_text = f"от 1 до {numbers[0]}"
-                else:
-                    num_result = random.randint(1, 100)
-                    title_text = "🎲 Число от 1 до 100"
-                    desc_text = "стандартное"
-    
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title=f"{title_text}: {num_result}",
-                    description=f"Случайное число {desc_text}",
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🎲 {num_result}"
-                    )
-                ))
-    
-            # 5. Факты и прочее (как было)
-            if "факт" in user_input and "жутк" not in user_input:
-                fact = random.choice(FACTS)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="🧠 Случайный факт",
-                    description=fact[:60] + "..." if len(fact) > 60 else fact,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🧠 {fact}"
-                    )
-                ))
-    
-            if "жутк" in user_input or "крипи" in user_input:
-                creepy_fact = random.choice(CREEPY_FACTS)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="😱 Жуткий факт",
-                    description=creepy_fact[:60] + "..." if len(creepy_fact) > 60 else creepy_fact,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"😱 {creepy_fact}"
-                    )
-                ))
-    
-            if "цитат" in user_input:
-                quote = random.choice(QUOTES)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="💬 Случайная цитата",
-                    description=quote[:60] + "..." if len(quote) > 60 else quote,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"💬 {quote}"
-                    )
-                ))
-    
-            if "совет" in user_input:
-                advice = random.choice(ADVICES)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="💡 Полезный совет",
-                    description=advice[:60] + "..." if len(advice) > 60 else advice,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"💡 {advice}"
-                    )
-                ))
-    
-            if "оправдан" in user_input:
-                excuse = random.choice(EXCUSES)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="🤷 Оправдание",
-                    description=excuse[:60] + "..." if len(excuse) > 60 else excuse,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🤷 {excuse}"
-                    )
-                ))
-    
-            if "мем" in user_input:
-                try:
-                    memes = get_local_memes()
-                    if memes:
-                        meme_file = random.choice(memes)
-                        result_id += 1
-                        results.append(telebot.types.InlineQueryResultArticle(
-                            id=str(result_id),
-                            title="😂 Случайный мем",
-                            description=f"Нажми, чтобы получить мем",
-                            input_message_content=telebot.types.InputTextMessageContent(
-                                f"🍿 Держи мемосик! (файл: {meme_file})"
-                            )
-                        ))
-                    else:
-                        result_id += 1
-                        results.append(telebot.types.InlineQueryResultArticle(
-                            id=str(result_id),
-                            title="📭 Мемов пока нет",
-                            description="Загрузи мемы в папку",
-                            input_message_content=telebot.types.InputTextMessageContent(
-                                "😢 В папке нет мемов. Загрузи картинки через GitHub."
-                            )
-                        ))
-                except Exception as e:
-                    print(f"Ошибка мема в инлайн: {e}")
-    
-            # ========== RP В ИНЛАЙНЕ ==========
-            # Проверяем, похоже ли на RP-команду
-            rp_commands_list = [
-                "обнять", "согреть", "укрыть", "погладить", "пожалеть",
-                "налить_чай", "подарить_уют", "посветить", "заварить_кофе",
-                "укусить", "ударить", "задушить", "закидать_тапками",
-                "отправить_в_бан", "дать_леща", "загипнотизировать",
-                "обнять_со_спины", "сделать_комплимент", "испугать",
-                "кинуть_подушкой", "облить_водой", "защитить", "атаковать",
-                "исцелить", "воскресить", "подарить_тишину", "поделиться_светом",
-                "обнять_душой", "послать_лучики", "разделить_тишину"
-                ]
-            
-            for rp_cmd in rp_commands_list:
-                if rp_cmd in user_input and len(user_input.split()) <= 3:  # примерно "обнять @user"
-                    # Определяем, есть ли упоминание пользователя
-                    words = user_input.split()
-                    target = "пользователя"
-                    if len(words) > 1 and words[1].startswith('@'):
-                        target = words[1]
-                    
-                    # Выбираем случайную фразу (упрощённо)
-                    rp_phrases = [
-                        f"🤍 {rp_cmd} {target} с нежностью",
-                        f"✨ {rp_cmd} {target} от всей души",
-                        f"🫂 {rp_cmd} {target} в ответ",
-                        f"💫 {rp_cmd} {target} и улыбается"
-                    ]
-                    phrase = random.choice(rp_phrases)
-                    
-                    result_id += 1
-                    results.append(telebot.types.InlineQueryResultArticle(
-                        id=str(result_id),
-                        title=f"🤗 {rp_cmd} {target}",
-                        description=f"Выполнить RP-действие",
-                        input_message_content=telebot.types.InputTextMessageContent(
-                            phrase
-                        )
-                    ))
-    
-            # Если ничего не подошло — показываем помощь
-            if not results:
-                help_text = (
-                    "🤖 Доступные инлайн-команды:\n"
-                    "• @бот 2+2*2 — калькулятор\n"
-                    "• @бот шар вопрос? — магический шар\n"
-                    "• @бот монетка — орёл/решка\n"
-                    "• @бот рандом 1 10 — число\n"
-                    "• @бот факт — обычный факт\n"
-                    "• @бот жуткий факт — жуткий факт\n"
-                    "• @бот цитата — случайная цитата\n"
-                    "• @бот совет — полезный совет\n"
-                    "• @бот оправдание — оправдание\n"
-                    "• @бот мем — случайный мем\n"
-                    "• @бот обнять @user — RP-команды"
-                )
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="❓ Помощь по инлайн-режиму",
-                    description="Что я умею в инлайн",
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        help_text, parse_mode="Markdown"
-                    )
-                ))
-    
-            bot.answer_inline_query(query.id, results)
-    
-        except Exception as e:
-            print(f"Ошибка в инлайн-режиме: {e}")
-            try:
-                help_text = "❓ Используй @бот + запрос (например, @бот 2+2, @бот шар?, @бот мем)"
-                bot.answer_inline_query(query.id, [
-                    telebot.types.InlineQueryResultArticle(
-                        id='error',
-                        title="⚠️ Произошла ошибка",
-                        description=help_text,
-                        input_message_content=telebot.types.InputTextMessageContent(help_text)
-                    )
-                ])
-            except:
-                pass
-    # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
 
     # ========== RP КОМАНДЫ (МЕГАБЛОК) ==========
     
@@ -3943,8 +3697,8 @@ def send_evening_greeting():
     
     HUG_BACK_PHRASES = [
         "подкралась к {target} и обняла со спины. Тот чуть не уронил телефон 😅",
-        "неожиданно обнимает {target] сзади и шепчет 'попался'",
-        "обнимает {target] со спины, тот вздрагивает и улыбается",
+        "неожиданно обнимает {target} сзади и шепчет 'попался'",
+        "обнимает {target} со спины, тот вздрагивает и улыбается",
         "подходит сзади и кладёт голову на плечо {target}",
         "обнимает {target} со спины и не отпускает",
         "подкрадывается к {target} и обнимает со спины, тот визжит",
@@ -4193,7 +3947,7 @@ def send_evening_greeting():
         target = get_target_name(message)
         phrase = random.choice(HIT_PHRASES).format(target=target)
         bot.reply_to(message, f"{message.from_user.first_name} {phrase}")
-        
+    
     @bot.message_handler(commands=['задушить'])
     def cmd_suffocate(message):
         target = get_target_name(message)
@@ -4289,7 +4043,7 @@ def send_evening_greeting():
         target = get_target_name(message)
         phrase = random.choice(SHARE_LIGHT_PHRASES).format(target=target)
         bot.reply_to(message, f"{message.from_user.first_name} {phrase}")
-        
+    
     @bot.message_handler(commands=['обнять_душой'])
     def cmd_hug_soul(message):
         target = get_target_name(message)
@@ -4309,6 +4063,254 @@ def send_evening_greeting():
         bot.reply_to(message, f"{phrase}")
     
     # ========== КОНЕЦ RP-БЛОКА ==========
+
+        # ========== ИНЛАЙН-РЕЖИМ (С РП) ==========
+    @bot.inline_handler(func=lambda query: len(query.query) > 0)
+    def query_text(query):
+        try:
+            user_input = query.query.lower().strip()
+            results = []
+            result_id = 0
+    
+            # 1. Калькулятор
+            if any(op in user_input for op in '+-*/') and re.match(r'^[0-9+\-*/().\s]+$', user_input):
+                try:
+                    calc_result = safe_calculate(user_input)
+                    if calc_result:
+                        result_id += 1
+                        results.append(telebot.types.InlineQueryResultArticle(
+                            id=str(result_id),
+                            title=f"🧮 {user_input} = {calc_result}",
+                            description="Посчитать выражение",
+                            input_message_content=telebot.types.InputTextMessageContent(
+                                f"🧮 {user_input} = {calc_result}"
+                            )
+                        ))
+                except:
+                    pass
+    
+            # 2. Магический шар (упрощённо, без проверки на ?)
+            if "шар" in user_input:
+                ball_answer = random.choice(BALL_ANSWERS)
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title=f"🎱 {ball_answer}",
+                    description="Ответ магического шара",
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        f"🎱 {ball_answer}"
+                    )
+                ))
+    
+            # 3. Монетка
+            if any(word in user_input for word in ["монетка", "орел", "решка", "подбрось"]):
+                coin_result = random.choice(["🪙 Орёл!", "🪙 Решка!"])
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title=coin_result,
+                    description="Подбросить монетку",
+                    input_message_content=telebot.types.InputTextMessageContent(coin_result)
+                ))
+    
+            # 4. Случайное число
+            if "рандом" in user_input or "число" in user_input:
+                numbers = [int(w) for w in user_input.split() if w.isdigit()]
+                if len(numbers) >= 2:
+                    num_result = random.randint(min(numbers[0], numbers[1]), max(numbers[0], numbers[1]))
+                    title_text = f"🎲 Число от {min(numbers[0], numbers[1])} до {max(numbers[0], numbers[1])}"
+                    desc_text = f"от {min(numbers[0], numbers[1])} до {max(numbers[0], numbers[1])}"
+                elif len(numbers) == 1:
+                    num_result = random.randint(1, numbers[0])
+                    title_text = f"🎲 Число от 1 до {numbers[0]}"
+                    desc_text = f"от 1 до {numbers[0]}"
+                else:
+                    num_result = random.randint(1, 100)
+                    title_text = "🎲 Число от 1 до 100"
+                    desc_text = "стандартное"
+    
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title=f"{title_text}: {num_result}",
+                    description=f"Случайное число {desc_text}",
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        f"🎲 {num_result}"
+                    )
+                ))
+    
+            # 5. Факты и прочее (как было)
+            if "факт" in user_input and "жутк" not in user_input:
+                fact = random.choice(FACTS)
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title="🧠 Случайный факт",
+                    description=fact[:60] + "..." if len(fact) > 60 else fact,
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        f"🧠 {fact}"
+                    )
+                ))
+    
+            if "жутк" in user_input or "крипи" in user_input:
+                creepy_fact = random.choice(CREEPY_FACTS)
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title="😱 Жуткий факт",
+                    description=creepy_fact[:60] + "..." if len(creepy_fact) > 60 else creepy_fact,
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        f"😱 {creepy_fact}"
+                    )
+                ))
+    
+            if "цитат" in user_input:
+                quote = random.choice(QUOTES)
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title="💬 Случайная цитата",
+                    description=quote[:60] + "..." if len(quote) > 60 else quote,
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        f"💬 {quote}"
+                    )
+                ))
+    
+            if "совет" in user_input:
+                advice = random.choice(ADVICES)
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title="💡 Полезный совет",
+                    description=advice[:60] + "..." if len(advice) > 60 else advice,
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        f"💡 {advice}"
+                    )
+                ))
+    
+            if "оправдан" in user_input:
+                excuse = random.choice(EXCUSES)
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title="🤷 Оправдание",
+                    description=excuse[:60] + "..." if len(excuse) > 60 else excuse,
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        f"🤷 {excuse}"
+                    )
+                ))
+    
+            if "мем" in user_input:
+                try:
+                    memes = get_local_memes()
+                    if memes:
+                        meme_file = random.choice(memes)
+                        result_id += 1
+                        results.append(telebot.types.InlineQueryResultArticle(
+                            id=str(result_id),
+                            title="😂 Случайный мем",
+                            description=f"Нажми, чтобы получить мем",
+                            input_message_content=telebot.types.InputTextMessageContent(
+                                f"🍿 Держи мемосик! (файл: {meme_file})"
+                            )
+                        ))
+                    else:
+                        result_id += 1
+                        results.append(telebot.types.InlineQueryResultArticle(
+                            id=str(result_id),
+                            title="📭 Мемов пока нет",
+                            description="Загрузи мемы в папку",
+                            input_message_content=telebot.types.InputTextMessageContent(
+                                "😢 В папке нет мемов. Загрузи картинки через GitHub."
+                            )
+                        ))
+                except Exception as e:
+                    print(f"Ошибка мема в инлайн: {e}")
+    
+            # ========== RP В ИНЛАЙНЕ ==========
+            # Проверяем, похоже ли на RP-команду
+            rp_commands_list = [
+                "обнять", "согреть", "укрыть", "погладить", "пожалеть",
+                "налить_чай", "подарить_уют", "посветить", "заварить_кофе",
+                "укусить", "ударить", "задушить", "закидать_тапками",
+                "отправить_в_бан", "дать_леща", "загипнотизировать",
+                "обнять_со_спины", "сделать_комплимент", "испугать",
+                "кинуть_подушкой", "облить_водой", "защитить", "атаковать",
+                "исцелить", "воскресить", "подарить_тишину", "поделиться_светом",
+                "обнять_душой", "послать_лучики", "разделить_тишину"
+                ]
+            
+            for rp_cmd in rp_commands_list:
+                if rp_cmd in user_input and len(user_input.split()) <= 3:  # примерно "обнять @user"
+                    # Определяем, есть ли упоминание пользователя
+                    words = user_input.split()
+                    target = "пользователя"
+                    if len(words) > 1 and words[1].startswith('@'):
+                        target = words[1]
+                    
+                    # Выбираем случайную фразу (упрощённо)
+                    rp_phrases = [
+                        f"🤍 {rp_cmd} {target} с нежностью",
+                        f"✨ {rp_cmd} {target} от всей души",
+                        f"🫂 {rp_cmd} {target} в ответ",
+                        f"💫 {rp_cmd} {target} и улыбается"
+                    ]
+                    phrase = random.choice(rp_phrases)
+                    
+                    result_id += 1
+                    results.append(telebot.types.InlineQueryResultArticle(
+                        id=str(result_id),
+                        title=f"🤗 {rp_cmd} {target}",
+                        description=f"Выполнить RP-действие",
+                        input_message_content=telebot.types.InputTextMessageContent(
+                            phrase
+                        )
+                    ))
+    
+            # Если ничего не подошло — показываем помощь
+            if not results:
+                help_text = (
+                    "🤖 Доступные инлайн-команды:\n"
+                    "• @бот 2+2*2 — калькулятор\n"
+                    "• @бот шар вопрос? — магический шар\n"
+                    "• @бот монетка — орёл/решка\n"
+                    "• @бот рандом 1 10 — число\n"
+                    "• @бот факт — обычный факт\n"
+                    "• @бот жуткий факт — жуткий факт\n"
+                    "• @бот цитата — случайная цитата\n"
+                    "• @бот совет — полезный совет\n"
+                    "• @бот оправдание — оправдание\n"
+                    "• @бот мем — случайный мем\n"
+                    "• @бот обнять @user — RP-команды"
+                )
+                result_id += 1
+                results.append(telebot.types.InlineQueryResultArticle(
+                    id=str(result_id),
+                    title="❓ Помощь по инлайн-режиму",
+                    description="Что я умею в инлайн",
+                    input_message_content=telebot.types.InputTextMessageContent(
+                        help_text, parse_mode="Markdown"
+                    )
+                ))
+    
+            bot.answer_inline_query(query.id, results)
+    
+        except Exception as e:
+            print(f"Ошибка в инлайн-режиме: {e}")
+            try:
+                help_text = "❓ Используй @бот + запрос (например, @бот 2+2, @бот шар?, @бот мем)"
+                bot.answer_inline_query(query.id, [
+                    telebot.types.InlineQueryResultArticle(
+                        id='error',
+                        title="⚠️ Произошла ошибка",
+                        description=help_text,
+                        input_message_content=telebot.types.InputTextMessageContent(help_text)
+                    )
+                ])
+            except:
+                pass
+    # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
+
 
 # ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ ТЕБЯ) ==========
 YOUR_USER_ID = 6001013593  # 👈 твой ID
