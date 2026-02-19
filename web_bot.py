@@ -4193,7 +4193,8 @@ def send_evening_greeting():
         target = get_target_name(message)
         phrase = random.choice(HIT_PHRASES).format(target=target)
         bot.reply_to(message, f"{message.from_user.first_name} {phrase}")
-        @bot.message_handler(commands=['задушить'])
+        
+    @bot.message_handler(commands=['задушить'])
     def cmd_suffocate(message):
         target = get_target_name(message)
         phrase = random.choice(SUFFOCATE_PHRASES).format(target=target)
