@@ -3483,6 +3483,10 @@ def send_evening_greeting():
             return message.text.split()[1]
         else:
             return "воздух"
+
+    @bot.message_handler(commands=['ррр'])
+    def cmd_rrr(message):
+        bot.reply_to(message, "🦁 Р-р-р! RP-блок жив!")
     
     # ==================== УЮТНЫЕ / ТЁПЛЫЕ ====================
     
