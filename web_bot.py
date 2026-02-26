@@ -4031,7 +4031,7 @@ def register_handlers():
             status_msg = bot.reply_to(message, "🔍 Ищу все праздники на сегодня...")
     
             # 1. Загружаем страницу
-            url = "https://my-calend.ru"
+            url = "https://kakoysegodnyaprazdnik.ru"  # другой сайт
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
             }
@@ -4045,41 +4045,34 @@ def register_handlers():
             # 2. Разбираем HTML
             soup = BeautifulSoup(response.text, 'html.parser')
     
-            # Ищем блок с праздниками. На my-calend.ru они часто в <ul class="holidays-list">
-            holidays_list = soup.find('ul', class_='holidays-list')
-            if not holidays_list:
-                # Если не нашли, пробуем другой вариант
-                holidays_section = soup.find('div', class_='holidays')
-                if holidays_section:
-                    holidays_list = holidays_section.find('ul')
+            # Находим все элементы с праздниками
+            holidays = []
+            
+            # Пробуем найти по тегам (самый частый случай)
+            for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'span', 'div']):
+                text = tag.get_text(strip=True)
+                # Фильтруем: не слишком короткое, не ссылки, не даты
+                if text and len(text) > 5 and len(text) < 100:
+                    if any(word in text.lower() for word in ['день', 'праздник', 'международный', 'всемирный']):
+                        holidays.append(text)
     
-            if not holidays_list:
-                bot.edit_message_text("😕 Не удалось найти список праздников на странице.", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                return
-    
-            # Собираем все праздники из тегов <li> или <span>
-            holidays = holidays_list.find_all('li')
+            # Если ничего не нашли, пробуем другой метод
             if not holidays:
-                # Если не нашли в li, ищем в span внутри li
-                holidays = holidays_list.find_all('span')
+                # Ищем все абзацы с праздниками
+                for p in soup.find_all('p'):
+                    text = p.get_text(strip=True)
+                    if text and len(text) > 5 and 'день' in text.lower():
+                        holidays.append(text)
+    
+            # Убираем дубликаты
+            holidays = list(dict.fromkeys(holidays))
     
             if not holidays:
-                bot.edit_message_text("📅 Праздники на странице не найдены.", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                return
-    
-            # Формируем ответ
-            today_holidays = []
-            for item in holidays:
-                text = item.get_text(strip=True)
-                if text and len(text) > 3 and not text.isdigit():  # Убираем мусор
-                    today_holidays.append(f"• {text}")
-    
-            if not today_holidays:
                 bot.edit_message_text("🌙 Сегодня, кажется, нет праздников.", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
                 return
     
             # Отправляем результат
-            result_text = "🎉 Все праздники на сегодня:\n\n" + "\n".join(today_holidays[:20])  # Ограничим 20 штук, чтобы не было слишком длинно
+            result_text = "🎉 Все праздники на сегодня:\n\n" + "\n".join(holidays[:15])  # Ограничим 15 штук
             bot.edit_message_text(result_text, chat_id=status_msg.chat.id, message_id=status_msg.message_id, parse_mode="Markdown")
     
         except ImportError:
