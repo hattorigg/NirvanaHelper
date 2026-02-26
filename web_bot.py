@@ -4020,20 +4020,30 @@ def register_handlers():
         bot.reply_to(message, f"🪐 {text}")
     
     # ========== КОНЕЦ МЕГАБЛОКА ==========
-    # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (ПОЛНАЯ ВЕРСИЯ) ==========
+    # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (ТОЛЬКО ПАРСИНГ) ==========
     @bot.message_handler(commands=['holidays'])
     def cmd_holidays(message):
         try:
             import requests
             from bs4 import BeautifulSoup
             from datetime import datetime
+            import random
     
             status_msg = bot.reply_to(message, "🔍 Собираю все праздники на сегодня...")
     
             today = datetime.now()
             all_holidays = []
     
-            # === ИСТОЧНИК 1: calend.ru (очень много праздников) ===
+            # Эмодзи для праздников
+            HOLIDAY_EMOJIS = [
+                "🎉", "🎊", "🎈", "🎇", "✨", "🌟", "💫", "⭐️", "🪄", "🎭",
+                "🎨", "🎬", "🎤", "🎧", "🎸", "🥁", "🎷", "🎺", "🎻", "🪇",
+                "🏆", "🥇", "🥈", "🥉", "🏅", "🎖️", "🏵️", "🎗️", "🎫", "🎟️",
+                "🌍", "🌎", "🌏", "🌐", "🗺️", "🧭", "⛰️", "🏝️", "🏜️", "🏖️",
+                "🌋", "🏔️", "⛲", "⛺", "🛖", "🏠", "🏡", "🏘️", "🏚️", "🏗️"
+            ]
+    
+            # === ИСТОЧНИК 1: calend.ru ===
             try:
                 url = "https://calend.ru"
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -4041,73 +4051,64 @@ def register_handlers():
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, 'html.parser')
                     
-                    # Ищем все возможные блоки с праздниками
-                    for block in soup.find_all(['div', 'li', 'span', 'a']):
+                    for block in soup.find_all(['li', 'span', 'a']):
                         text = block.get_text(strip=True)
-                        if text and len(text) > 5 and len(text) < 150:
-                            # Фильтруем: должно содержать слово "день" или похожее
-                            if any(kw in text.lower() for kw in ['день', 'праздник', 'год', 'международный']):
-                                # Убираем лишние цифры и мусор
-                                if not text.isdigit() and text not in all_holidays:
-                                    all_holidays.append(text[:100])
+                        if text and 5 < len(text) < 100:
+                            trash_words = ['сегодня', 'завтра', 'послезавтра', 'февраль', 'март', 'апрель', 
+                                         'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 
+                                         'воскресенье', 'меню', 'главная', 'календарь', 'праздники', 'именины',
+                                         'народный', 'хроника', 'компании', 'персоны', 'лунный', 'производственные',
+                                         '2026', '2027', '2025']
+                            
+                            if any(word in text.lower() for word in ['день', 'праздник', 'год', 'международный']):
+                                if not any(trash in text.lower() for trash in trash_words):
+                                    if text not in all_holidays:
+                                        all_holidays.append(text)
             except Exception as e:
                 print(f"Ошибка calend.ru: {e}")
     
-            # === ИСТОЧНИК 2: my-calend.ru ===
-            try:
-                url = "https://my-calend.ru"
-                resp = requests.get(url, headers=headers, timeout=7)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    for item in soup.find_all('li'):
-                        text = item.get_text(strip=True)
-                        if text and len(text) > 5 and 'день' in text.lower():
-                            if text not in all_holidays:
-                                all_holidays.append(text[:100])
-            except Exception as e:
-                print(f"Ошибка my-calend.ru: {e}")
-    
-            # === ИСТОЧНИК 3: kakoysegodnyaprazdnik.ru ===
+            # === ИСТОЧНИК 2: kakoysegodnyaprazdnik.ru ===
             try:
                 url = "https://kakoysegodnyaprazdnik.ru"
                 resp = requests.get(url, headers=headers, timeout=7)
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, 'html.parser')
-                    for tag in soup.find_all(['h1', 'h2', 'h3', 'span', 'div']):
+                    
+                    for tag in soup.find_all(['h1', 'h2', 'h3', 'span']):
                         text = tag.get_text(strip=True)
-                        if text and len(text) > 5:
-                            if any(kw in text.lower() for kw in ['день', 'праздник']):
-                                if text not in all_holidays:
-                                    all_holidays.append(text[:100])
+                        if text and 5 < len(text) < 100:
+                            if not any(word in text.lower() for word in ['сегодня', 'завтра', 'послезавтра', 'меню']):
+                                if any(word in text.lower() for word in ['день', 'праздник']):
+                                    if text not in all_holidays:
+                                        all_holidays.append(text)
             except Exception as e:
                 print(f"Ошибка kakoysegodnyaprazdnik.ru: {e}")
     
-            # === Убираем дубликаты и мусор ===
-            cleaned = []
+            # === ФИНАЛЬНАЯ ОЧИСТКА ===
+            clean_holidays = []
             for h in all_holidays:
-                # Убираем слишком короткие
-                if len(h) < 10:
+                if len(h) < 5:
                     continue
-                # Убираем технические фразы
-                if any(trash in h for trash in ['меню', 'главная', 'популярное', 'контакты']):
+                if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения']):
                     continue
-                # Убираем явные повторы
-                if h not in cleaned:
-                    cleaned.append(h)
+                if h not in clean_holidays:
+                    clean_holidays.append(h)
     
-            # === Если ничего не нашли — сообщаем ===
-            if not cleaned:
+            # === ЕСЛИ НИЧЕГО НЕ НАШЛИ ===
+            if not clean_holidays:
                 bot.edit_message_text("😕 Не удалось найти праздники. Попробуй позже.",
                                      chat_id=status_msg.chat.id,
                                      message_id=status_msg.message_id)
                 return
-    
-            # === Формируем красивый ответ ===
+    # === ФОРМИРУЕМ ОТВЕТ ===
             result = f"🎉 Праздники на {today.strftime('%d %B %Y')}:\n\n"
-            for i, h in enumerate(cleaned[:25], 1):  # максимум 25, чтобы не спамить
-                result += f"{i}. {h}\n"
             
-            result += f"\n✨ Всего найдено: {len(cleaned)}"
+            random.shuffle(clean_holidays)
+            for i, h in enumerate(clean_holidays[:30], 1):
+                emoji = random.choice(HOLIDAY_EMOJIS)
+                result += f"{emoji} {h}\n"
+            
+            result += f"\n✨ Всего найдено: {len(clean_holidays)}"
     
             bot.edit_message_text(result,
                                  chat_id=status_msg.chat.id,
