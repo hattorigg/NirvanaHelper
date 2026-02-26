@@ -4020,7 +4020,76 @@ def register_handlers():
         bot.reply_to(message, f"🪐 {text}")
     
     # ========== КОНЕЦ МЕГАБЛОКА ==========
-  
+    # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ ==========
+    @bot.message_handler(commands=['holidays'])
+    def cmd_holidays(message):
+        try:
+            import requests
+            from bs4 import BeautifulSoup
+    
+            # Показываем, что бот работает
+            status_msg = bot.reply_to(message, "🔍 Ищу все праздники на сегодня...")
+    
+            # 1. Загружаем страницу
+            url = "https://my-calend.ru"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            response.encoding = 'utf-8'
+    
+            if response.status_code != 200:
+                bot.edit_message_text("❌ Не удалось загрузить календарь.", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                return
+    
+            # 2. Разбираем HTML
+            soup = BeautifulSoup(response.text, 'html.parser')
+    
+            # Ищем блок с праздниками. На my-calend.ru они часто в <ul class="holidays-list">
+            holidays_list = soup.find('ul', class_='holidays-list')
+            if not holidays_list:
+                # Если не нашли, пробуем другой вариант
+                holidays_section = soup.find('div', class_='holidays')
+                if holidays_section:
+                    holidays_list = holidays_section.find('ul')
+    
+            if not holidays_list:
+                bot.edit_message_text("😕 Не удалось найти список праздников на странице.", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                return
+    
+            # Собираем все праздники из тегов <li> или <span>
+            holidays = holidays_list.find_all('li')
+            if not holidays:
+                # Если не нашли в li, ищем в span внутри li
+                holidays = holidays_list.find_all('span')
+    
+            if not holidays:
+                bot.edit_message_text("📅 Праздники на странице не найдены.", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                return
+    
+            # Формируем ответ
+            today_holidays = []
+            for item in holidays:
+                text = item.get_text(strip=True)
+                if text and len(text) > 3 and not text.isdigit():  # Убираем мусор
+                    today_holidays.append(f"• {text}")
+    
+            if not today_holidays:
+                bot.edit_message_text("🌙 Сегодня, кажется, нет праздников.", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                return
+    
+            # Отправляем результат
+            result_text = "🎉 Все праздники на сегодня:\n\n" + "\n".join(today_holidays[:20])  # Ограничим 20 штук, чтобы не было слишком длинно
+            bot.edit_message_text(result_text, chat_id=status_msg.chat.id, message_id=status_msg.message_id, parse_mode="Markdown")
+    
+        except ImportError:
+            bot.reply_to(message, "❌ На сервере не хватает библиотек. Нужно установить requests и beautifulsoup4.")
+        except requests.exceptions.Timeout:
+            bot.reply_to(message, "⏳ Сервер с праздниками не отвечает. Попробуй позже.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ Какая-то ошибка: {e}")
+            print(f"Ошибка в /holidays: {e}")
+    # ========== КОНЕЦ /holidays ==========
                 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
     "☀️ Доброе утро, чат! Пусть день будет ярким, а настроение — огонь!",
