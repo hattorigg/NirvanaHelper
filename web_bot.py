@@ -4020,6 +4020,86 @@ def register_handlers():
         bot.reply_to(message, f"🪐 {text}")
     
     # ========== КОНЕЦ МЕГАБЛОКА ==========
+    # ========== АНТИССЫЛОЧНЫЙ МОДЕРАТОР ==========
+    # Хранилище статуса для каждого чата
+    antilink_settings = {}  # chat_id: True/False
+    
+    @bot.message_handler(commands=['antilink'])
+    def cmd_antilink(message):
+        # Только для админов
+        if message.from_user.id not in [6001013593]:  # твой ID
+            bot.reply_to(message, "❌ Только для создателя")
+            return
+        
+        args = message.text.split()
+        if len(args) < 2:
+            status = "включена" if antilink_settings.get(message.chat.id, False) else "выключена"
+            bot.reply_to(message, f"🛡️ Антиссылка сейчас {status}\nИспользуй: /antilink on / off", parse_mode="Markdown")
+            return
+        
+        if args[1].lower() in ['on', 'вкл', 'да']:
+            antilink_settings[message.chat.id] = True
+            bot.reply_to(message, "🛡️ Антиссылка включена. Все сообщения со ссылками будут удаляться.", parse_mode="Markdown")
+        elif args[1].lower() in ['off', 'выкл', 'нет']:
+            antilink_settings[message.chat.id] = False
+            bot.reply_to(message, "🛡️ Антиссылка выключена. Ссылки разрешены.", parse_mode="Markdown")
+        else:
+            bot.reply_to(message, "❌ Используй: /antilink on / off")
+    
+    # Обработчик всех сообщений
+    @bot.message_handler(func=lambda message: True)
+    def anti_link_checker(message):
+        # Игнорируем личные сообщения
+        if message.chat.type == 'private':
+            return
+        
+        # Проверяем, включена ли защита в этом чате
+        if not antilink_settings.get(message.chat.id, False):
+            return
+        
+        # Текст сообщения
+        text = message.text or message.caption or ""
+        
+        import re
+        
+        # ✅ 1. Удаляем ссылки (включая t.me/joinchat, но НЕ простые @username)
+        url_pattern = r'(https?://|www\.)[^\s]+|t\.me/joinchat/\S+'
+        
+        # ❌ 2. НЕ трогаем обычные упоминания @username
+        #    Они не попадают под паттерн выше
+        
+        if re.search(url_pattern, text, re.IGNORECASE):
+            try:
+                # Удаляем сообщение
+                bot.delete_message(message.chat.id, message.message_id)
+                print(f"🧹 Удалено сообщение со ссылкой от {message.from_user.first_name} в чате {message.chat.id}")
+                
+                # Шлём предупреждение (опционально — можно закомментировать)
+                warning = bot.send_message(
+                    message.chat.id,
+                    f"⚠️ {message.from_user.first_name}, в этом чате запрещены ссылки.",
+                    reply_to_message_id=message.message_id
+                )
+                # Удаляем предупреждение через 5 секунд
+                import time
+                time.sleep(5)
+                bot.delete_message(message.chat.id, warning.message_id)
+                
+            except Exception as e:
+                print(f"❌ Не удалось удалить сообщение: {e}")
+            return  # выходим, чтобы не проверять кнопки дальше
+        
+        # ✅ Проверяем наличие кнопок с URL
+        if message.reply_markup and hasattr(message.reply_markup, 'inline_keyboard'):
+            for row in message.reply_markup.inline_keyboard:
+                for button in row:
+                    if button.url:
+                        try:
+                            bot.delete_message(message.chat.id, message.message_id)
+                            print(f"🧹 Удалено сообщение с URL-кнопкой от {message.from_user.first_name}")
+                            return
+                        except:
+                            pass
     # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (ТОЛЬКО ПАРСИНГ) ==========
     @bot.message_handler(commands=['holidays'])
     def cmd_holidays(message):
