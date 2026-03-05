@@ -4020,28 +4020,294 @@ def register_handlers():
         bot.reply_to(message, f"🪐 {text}")
     
     # ========== КОНЕЦ МЕГАБЛОКА ==========
-    # ========== АНТИССЫЛОЧНЫЙ МОДЕРАТОР ==========
-    # Хранилище статуса для каждого чата
-    antilink_settings = {}  # chat_id: True/False
+    # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (С АВТОЭМОДЗИ) ==========
+    @bot.message_handler(commands=['holidays'])
+    def cmd_holidays(message):
+        try:
+            import requests
+            from bs4 import BeautifulSoup
+            from datetime import datetime
+            import random
+    
+            status_msg = bot.reply_to(message, "🔍 Ищу все праздники на сегодня...")
+    
+            today = datetime.now()
+            all_holidays = []
+            errors = []
+    
+            # === СЛОВАРЬ ЭМОДЗИ ПО КЛЮЧЕВЫМ СЛОВАМ ===
+            EMOJI_MAP = {
+                # Животные
+                'кошек': '🐱', 'кота': '🐱', 'котов': '🐱', 'кошки': '🐱',
+                'собак': '🐶', 'псов': '🐶', 'собаки': '🐶',
+                'птиц': '🐦', 'птицы': '🐦',
+                'лошади': '🐴', 'коня': '🐴', 'лошадей': '🐴',
+                'медвед': '🐻', 'мишек': '🐻',
+                'лис': '🦊', 'лисы': '🦊',
+                'волк': '🐺', 'волка': '🐺',
+                'зайц': '🐰', 'кролик': '🐰',
+                'белк': '🐿️',
+                'ежей': '🦔', 'ежа': '🦔',
+                'кит': '🐋', 'китов': '🐋',
+                'дельфин': '🐬',
+                'слон': '🐘', 'слона': '🐘',
+                'жираф': '🦒',
+                'кенгуру': '🦘',
+                'осьминог': '🐙',
+                'рыб': '🐟', 'рыбы': '🐟',
+                'бабочк': '🦋',
+                'пчел': '🐝', 'пчёлы': '🐝',
+                'божьей коровк': '🐞',
+    
+                # Природа
+                'земли': '🌍', 'планеты': '🌍',
+                'воды': '💧', 'моря': '🌊',
+                'леса': '🌲', 'деревьев': '🌳',
+                'цветов': '🌸', 'цветы': '🌸',
+                'роз': '🌹', 'розы': '🌹',
+                'солнц': '☀️',
+                'луны': '🌙', 'луна': '🌙',
+                'звезд': '⭐', 'звёзд': '⭐',
+                'ветра': '💨',
+                'огня': '🔥', 'пламени': '🔥',
+                'гор': '🏔️', 'вершин': '⛰️',
+    
+                # Еда
+                'хлеб': '🍞', 'хлеба': '🍞',
+                'молок': '🥛',
+                'сыр': '🧀', 'сыра': '🧀',
+                'фрукт': '🍎', 'фруктов': '🍎',
+                'яблок': '🍎', 'яблоч': '🍎',
+                'виноград': '🍇',
+                'арбуз': '🍉',
+                'дын': '🍈',
+                'лимон': '🍋',
+                'банан': '🍌',
+                'ананас': '🍍',
+                'кокос': '🥥',
+                'манго': '🥭',
+                'пицц': '🍕',
+                'бургер': '🍔',
+                'пирог': '🥧', 'пирога': '🥧',
+                'торт': '🎂', 'торта': '🎂',
+                'морожен': '🍦',
+                'шоколад': '🍫',
+                'конфет': '🍬', 'конфеты': '🍬',
+                'чай': '🍵', 'чая': '🍵',
+                'кофе': '☕', 'кофе': '☕',
+                'пив': '🍺', 'пива': '🍺',
+                'вин': '🍷', 'вина': '🍷',
+                'водк': '🥃', 'водки': '🥃',
+    
+                # Праздники и люди
+                'новый год': '🎄',
+                'рождество': '🎅',
+                'пасх': '🥚',
+                'хэллоуин': '🎃',
+                'святого валентина': '❤️',
+                'женский': '🌷',
+                'защитника': '🎖️',
+                'победы': '🎗️',
+                'смеха': '😄',
+                'знаний': '📚',
+                'учител': '👩‍🏫',
+                'врач': '👩‍⚕️',
+                'медсестр': '👩‍⚕️',
+                'стоматолог': '🦷',
+                'поэзии': '📜',
+                'танц': '💃',
+                'музык': '🎵',
+                'театр': '🎭',
+                'кино': '🎬',
+                'смеха': '😂',
+    
+                # Эмоции и состояния
+                'счасть': '😊',
+                'любв': '❤️', 'любовь': '❤️',
+                'дружб': '🤝',
+                'объятий': '🫂',
+                'поцелу': '💋',
+                'матери': '👩‍👧',
+                'отца': '👨‍👧',
+                'ребенк': '👶', 'детей': '👶',
+                'бабушк': '👵',
+                'дедушк': '👴',
+    
+                # Профессии
+                'программист': '👨‍💻',
+                'учител': '👩‍🏫',
+                'строител': '👷',
+                'пожарн': '🚒',
+                'полиц': '👮',
+                'врач': '👩‍⚕️',
+                'медсестр': '👩‍⚕️',
+                'лётчик': '✈️',
+                'космонавт': '🚀',
+                'моряк': '⚓',
+                'рыбак': '🎣',
+                'повар': '👨‍🍳',
+                'художник': '🎨',
+                'писател': '✍️',
+                'журналист': '📰',
+                'библиотекар': '📚',
+                'архитектор': '🏛️',
+                'дизайнер': '🎨',
+            }
+    
+            # === ФУНКЦИЯ ПОДБОРА ЭМОДЗИ ===
+            def get_emoji_for_holiday(holiday_name):
+                holiday_lower = holiday_name.lower()
+                for keyword, emoji in EMOJI_MAP.items():
+                    if keyword in holiday_lower:
+                        return emoji
+                # Если не нашли — возвращаем случайный
+                fallback_emojis = ["🎉", "🎊", "✨", "🌟", "⭐", "🪄", "🎈", "🏆"]
+                return random.choice(fallback_emojis)
+    
+            # === ИСТОЧНИКИ (такие же, как в прошлой версии) ===
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            # calend.ru
+            try:
+                url = "https://calend.ru"
+                resp = requests.get(url, headers=headers, timeout=7)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'li', 'span']):
+                        text = tag.get_text(strip=True)
+                        if text and 5 < len(text) < 120:
+                            if 'день' in text.lower() or 'праздник' in text.lower():
+                                if not any(x in text.lower() for x in ['меню', 'главная', 'сегодня', 'завтра', 'календарь', '2026']):
+                                    all_holidays.append(text)
+            except Exception as e:
+                errors.append(f"calend.ru: {e}")
+    
+            # my-calend.ru
+            try:
+                url = "https://my-calend.ru"
+                resp = requests.get(url, headers=headers, timeout=7)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    for tag in soup.find_all(['li', 'span']):
+                        text = tag.get_text(strip=True)
+                        if text and 5 < len(text) < 100:
+                            if 'день' in text.lower():
+                                if 'сегодня' not in text.lower():
+                                    all_holidays.append(text)
+            except Exception as e:
+                errors.append(f"my-calend.ru: {e}")
+    
+            # kakoysegodnyaprazdnik.ru
+            try:
+                url = "https://kakoysegodnyaprazdnik.ru"
+                resp = requests.get(url, headers=headers, timeout=7)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    for tag in soup.find_all(['h1', 'h2', 'h3', 'span']):
+                        text = tag.get_text(strip=True)
+                        if text and 5 < len(text) < 100:
+                            if 'день' in text.lower() or 'праздник' in text.lower():
+                                if not any(x in text.lower() for x in ['сегодня', 'завтра', 'меню']):
+                                    all_holidays.append(text)
+            except Exception as e:
+                errors.append(f"kakoysegodnyaprazdnik.ru: {e}")
+    
+            # === ОЧИСТКА ===
+            clean = []
+            for h in all_holidays:
+                h = h.replace(' ', ' ').strip()
+                if len(h) < 8:
+                    continue
+                if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения', 'именины']):
+                    continue
+                if h not in clean:
+                    clean.append(h)
+    
+            # === ЕСЛИ НИЧЕГО НЕ НАШЛИ ===
+            if not clean:
+                error_text = "😕 Не удалось найти праздники."
+                if errors:
+                    error_text += f"\n\nОшибки: {', '.join(errors[:3])}"
+                bot.edit_message_text(error_text,
+                                     chat_id=status_msg.chat.id,
+                                     message_id=status_msg.message_id)
+                return
+                # === ОТВЕТ С УМНЫМИ ЭМОДЗИ ===
+            random.shuffle(clean)
+            result = f"🎉 Праздники на {today.strftime('%d %B %Y')}:\n\n"
+            for h in clean[:30]:
+                emoji = get_emoji_for_holiday(h)
+                result += f"{emoji} {h}\n"
+            result += f"\n✨ Всего найдено: {len(clean)}"
+    
+            bot.edit_message_text(result,
+                                 chat_id=status_msg.chat.id,
+                                 message_id=status_msg.message_id,
+                                 parse_mode="Markdown")
+    
+            if errors:
+                print(f"Ошибки при парсинге: {errors}")
+    
+        except Exception as e:
+            bot.reply_to(message, f"❌ Критическая ошибка: {e}")
+            print(f"Ошибка в /holidays: {e}")
+    # ========== КОНЕЦ /holidays ==========
+
+    # ========== АНТИССЫЛКА ДЛЯ КАЖДОГО ЧАТА ==========
+    import json
+    import os
+    import re
+    import time
+    
+    ANTILINK_FILE = "antilink_settings.json"
+    
+    # Загружаем настройки из файла
+    def load_antilink_settings():
+        if os.path.exists(ANTILINK_FILE):
+            try:
+                with open(ANTILINK_FILE, "r") as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+    
+    # Сохраняем настройки
+    def save_antilink_settings(settings):
+        try:
+            with open(ANTILINK_FILE, "w") as f:
+                json.dump(settings, f, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения настроек антиссылки: {e}")
+    
+    # Загружаем при старте
+    antilink_settings = load_antilink_settings()
     
     @bot.message_handler(commands=['antilink'])
     def cmd_antilink(message):
-        # Только для админов
-        if message.from_user.id not in [6001013593]:  # твой ID
-            bot.reply_to(message, "❌ Только для создателя")
-            return
+        chat_id = str(message.chat.id)
         
+        # Проверяем, является ли пользователь админом в этом чате
+        try:
+            user_status = bot.get_chat_member(chat_id, message.from_user.id).status
+            if user_status not in ['creator', 'administrator']:
+                bot.reply_to(message, "❌ Только администраторы чата могут включать/отключать антиссылку.")
+                return
+        except Exception as e:
+            print(f"Не удалось проверить права: {e}")
+    
         args = message.text.split()
         if len(args) < 2:
-            status = "включена" if antilink_settings.get(message.chat.id, False) else "выключена"
-            bot.reply_to(message, f"🛡️ Антиссылка сейчас {status}\nИспользуй: /antilink on / off", parse_mode="Markdown")
+            status = "включена" if antilink_settings.get(chat_id, False) else "выключена"
+            bot.reply_to(message, f"🛡️ В этом чате антиссылка {status}.\nИспользуй: /antilink on / off", parse_mode="Markdown")
             return
-        
+    
         if args[1].lower() in ['on', 'вкл', 'да']:
-            antilink_settings[message.chat.id] = True
-            bot.reply_to(message, "🛡️ Антиссылка включена. Все сообщения со ссылками будут удаляться.", parse_mode="Markdown")
+            antilink_settings[chat_id] = True
+            save_antilink_settings(antilink_settings)
+            bot.reply_to(message, "🛡️ Антиссылка включена. Все ссылки и подозрительные сообщения от ботов будут удаляться.", parse_mode="Markdown")
         elif args[1].lower() in ['off', 'выкл', 'нет']:
-            antilink_settings[message.chat.id] = False
+            antilink_settings[chat_id] = False
+            save_antilink_settings(antilink_settings)
             bot.reply_to(message, "🛡️ Антиссылка выключена. Ссылки разрешены.", parse_mode="Markdown")
         else:
             bot.reply_to(message, "❌ Используй: /antilink on / off")
@@ -4052,153 +4318,55 @@ def register_handlers():
         # Игнорируем личные сообщения
         if message.chat.type == 'private':
             return
-        
+    
+        chat_id = str(message.chat.id)
+    
         # Проверяем, включена ли защита в этом чате
-        if not antilink_settings.get(message.chat.id, False):
+        if not antilink_settings.get(chat_id, False):
             return
-        
-        # Текст сообщения
-        text = message.text or message.caption or ""
-        
-        import re
-        
-        # ✅ 1. Удаляем ссылки (включая t.me/joinchat, но НЕ простые @username)
-        url_pattern = r'(https?://|www\.)[^\s]+|t\.me/joinchat/\S+'
-        
-        # ❌ 2. НЕ трогаем обычные упоминания @username
-        #    Они не попадают под паттерн выше
-        
-        if re.search(url_pattern, text, re.IGNORECASE):
+    
+        should_delete = False
+        delete_reason = ""
+    
+        # КРИТЕРИИ УДАЛЕНИЯ
+        if message.from_user.is_bot and message.reply_markup:
+            should_delete = True
+            delete_reason = "бот с кнопками"
+    
+        elif message.from_user.is_bot and message.text:
+            url_pattern = r'(https?://|www\.)[^\s]+|t\.me/\S+'
+            if re.search(url_pattern, message.text, re.IGNORECASE):
+                should_delete = True
+                delete_reason = "бот со ссылкой в тексте"
+    
+        elif message.reply_markup:
+            if hasattr(message.reply_markup, 'inline_keyboard'):
+                for row in message.reply_markup.inline_keyboard:
+                    for button in row:
+                        if button.url and 't.me/' in button.url and 'bot' in button.url.lower():
+                            should_delete = True
+                            delete_reason = "кнопка на другого бота"
+                            break
+                    if should_delete:
+                        break
+    
+        if should_delete:
             try:
-                # Удаляем сообщение
                 bot.delete_message(message.chat.id, message.message_id)
-                print(f"🧹 Удалено сообщение со ссылкой от {message.from_user.first_name} в чате {message.chat.id}")
-                
-                # Шлём предупреждение (опционально — можно закомментировать)
+                print(f"🧹 [Чат {chat_id}] Удалено сообщение от {message.from_user.first_name} (причина: {delete_reason})")
+    
+                # Отправляем и сразу удаляем предупреждение
                 warning = bot.send_message(
                     message.chat.id,
-                    f"⚠️ {message.from_user.first_name}, в этом чате запрещены ссылки.",
-                    reply_to_message_id=message.message_id
+                    f"⚠️ Удалено сообщение от {message.from_user.first_name} (причина: {delete_reason})"
                 )
-                # Удаляем предупреждение через 5 секунд
-                import time
-                time.sleep(5)
+                time.sleep(3)
                 bot.delete_message(message.chat.id, warning.message_id)
-                
+    
             except Exception as e:
                 print(f"❌ Не удалось удалить сообщение: {e}")
-            return  # выходим, чтобы не проверять кнопки дальше
-        
-        # ✅ Проверяем наличие кнопок с URL
-        if message.reply_markup and hasattr(message.reply_markup, 'inline_keyboard'):
-            for row in message.reply_markup.inline_keyboard:
-                for button in row:
-                    if button.url:
-                        try:
-                            bot.delete_message(message.chat.id, message.message_id)
-                            print(f"🧹 Удалено сообщение с URL-кнопкой от {message.from_user.first_name}")
-                            return
-                        except:
-                            pass
-    # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (ТОЛЬКО ПАРСИНГ) ==========
-    @bot.message_handler(commands=['holidays'])
-    def cmd_holidays(message):
-        try:
-            import requests
-            from bs4 import BeautifulSoup
-            from datetime import datetime
-            import random
-    
-            status_msg = bot.reply_to(message, "🔍 Собираю все праздники на сегодня...")
-    
-            today = datetime.now()
-            all_holidays = []
-    
-            # Эмодзи для праздников
-            HOLIDAY_EMOJIS = [
-                "🎉", "🎊", "🎈", "🎇", "✨", "🌟", "💫", "⭐️", "🪄", "🎭",
-                "🎨", "🎬", "🎤", "🎧", "🎸", "🥁", "🎷", "🎺", "🎻", "🪇",
-                "🏆", "🥇", "🥈", "🥉", "🏅", "🎖️", "🏵️", "🎗️", "🎫", "🎟️",
-                "🌍", "🌎", "🌏", "🌐", "🗺️", "🧭", "⛰️", "🏝️", "🏜️", "🏖️",
-                "🌋", "🏔️", "⛲", "⛺", "🛖", "🏠", "🏡", "🏘️", "🏚️", "🏗️"
-            ]
-    
-            # === ИСТОЧНИК 1: calend.ru ===
-            try:
-                url = "https://calend.ru"
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-                resp = requests.get(url, headers=headers, timeout=7)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    
-                    for block in soup.find_all(['li', 'span', 'a']):
-                        text = block.get_text(strip=True)
-                        if text and 5 < len(text) < 100:
-                            trash_words = ['сегодня', 'завтра', 'послезавтра', 'февраль', 'март', 'апрель', 
-                                         'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 
-                                         'воскресенье', 'меню', 'главная', 'календарь', 'праздники', 'именины',
-                                         'народный', 'хроника', 'компании', 'персоны', 'лунный', 'производственные',
-                                         '2026', '2027', '2025']
-                            
-                            if any(word in text.lower() for word in ['день', 'праздник', 'год', 'международный']):
-                                if not any(trash in text.lower() for trash in trash_words):
-                                    if text not in all_holidays:
-                                        all_holidays.append(text)
-            except Exception as e:
-                print(f"Ошибка calend.ru: {e}")
-    
-            # === ИСТОЧНИК 2: kakoysegodnyaprazdnik.ru ===
-            try:
-                url = "https://kakoysegodnyaprazdnik.ru"
-                resp = requests.get(url, headers=headers, timeout=7)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    
-                    for tag in soup.find_all(['h1', 'h2', 'h3', 'span']):
-                        text = tag.get_text(strip=True)
-                        if text and 5 < len(text) < 100:
-                            if not any(word in text.lower() for word in ['сегодня', 'завтра', 'послезавтра', 'меню']):
-                                if any(word in text.lower() for word in ['день', 'праздник']):
-                                    if text not in all_holidays:
-                                        all_holidays.append(text)
-            except Exception as e:
-                print(f"Ошибка kakoysegodnyaprazdnik.ru: {e}")
-    
-            # === ФИНАЛЬНАЯ ОЧИСТКА ===
-            clean_holidays = []
-            for h in all_holidays:
-                if len(h) < 5:
-                    continue
-                if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения']):
-                    continue
-                if h not in clean_holidays:
-                    clean_holidays.append(h)
-    
-            # === ЕСЛИ НИЧЕГО НЕ НАШЛИ ===
-            if not clean_holidays:
-                bot.edit_message_text("😕 Не удалось найти праздники. Попробуй позже.",
-                                     chat_id=status_msg.chat.id,
-                                     message_id=status_msg.message_id)
-                return
-    # === ФОРМИРУЕМ ОТВЕТ ===
-            result = f"🎉 Праздники на {today.strftime('%d %B %Y')}:\n\n"
-            
-            random.shuffle(clean_holidays)
-            for i, h in enumerate(clean_holidays[:30], 1):
-                emoji = random.choice(HOLIDAY_EMOJIS)
-                result += f"{emoji} {h}\n"
-            
-            result += f"\n✨ Всего найдено: {len(clean_holidays)}"
-    
-            bot.edit_message_text(result,
-                                 chat_id=status_msg.chat.id,
-                                 message_id=status_msg.message_id,
-                                 parse_mode="Markdown")
-    
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-            print(f"Ошибка в /holidays: {e}")
-    # ========== КОНЕЦ /holidays ==========
+    # ========== КОНЕЦ АНТИССЫЛКИ ==========
+
                 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
     "☀️ Доброе утро, чат! Пусть день будет ярким, а настроение — огонь!",
