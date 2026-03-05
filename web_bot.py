@@ -80,7 +80,7 @@ reminder_thread = threading.Thread(target=check_reminders, daemon=True)
 reminder_thread.start()
 
 # ========== МЕМЫ ==========
-MEME_FOLDER = "."
+MEME_FOLDER = "memes"
 ALLOWED_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
 
 def get_local_memes():
