@@ -4284,10 +4284,7 @@ def register_handlers():
     def ask_yandex_gpt(prompt, context=""):
         if not YANDEX_API_KEY:
             return "❌ API-ключ не настроен. Обратись к создателю."
-    
-        # ⚠️ СЮДА НУЖНО ВСТАВИТЬ ТВОЙ FOLDER_ID ИЗ YANDEX CLOUD
-        FOLDER_ID = "b1gnebu0nesntu9a9jva"
-    
+            
         try:
             url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
             headers = {
@@ -4295,7 +4292,7 @@ def register_handlers():
                 "Content-Type": "application/json"
             }
             data = {
-                "modelUri": f"gpt://{FOLDER_ID}/yandexgpt-lite",
+                "modelUri": "gpt://yandexgpt-lite",
                 "completionOptions": {
                     "stream": False,
                     "temperature": 0.6,
