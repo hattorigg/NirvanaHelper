@@ -106,29 +106,6 @@ def safe_calculate(expression):
     except:
         return None
 
-def send_daily_meme():
-    try:
-        memes = get_local_memes()
-        if not memes:
-            return
-        meme_file = random.choice(memes)
-        meme_path = os.path.join(MEME_FOLDER, meme_file)
-        with open(meme_path, 'rb') as f:
-            bot.send_photo(CHAT_ID, f, caption="☕ С утра пораньше — мемчик в ленту")
-        print("Ежедневный мем отправлен")
-    except Exception as e:
-        print(f"Ошибка ежедневного мема: {e}")
-
-schedule.every().day.at("09:00").do(send_daily_meme)
-
-def run_schedule():
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-schedule_thread = threading.Thread(target=run_schedule, daemon=True)
-schedule_thread.start()
-
 # ========== ПРАЗДНИКИ НА КАЖДЫЙ ДЕНЬ (365) ==========
 HOLIDAYS = {
     # ЯНВАРЬ
@@ -1998,6 +1975,7 @@ HISTORICAL_FACTS = [
 ]
 # ========== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ ==========
 def register_handlers():
+    import os
 
         # ========== RP КОМАНДЫ (МЕГАБЛОК) ==========
     
