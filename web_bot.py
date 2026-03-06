@@ -4252,7 +4252,6 @@ def register_handlers():
             bot.reply_to(message, f"❌ Критическая ошибка: {e}")
             print(f"Ошибка в /holidays: {e}")
     # ========== КОНЕЦ /holidays ==========
-
     # ========== СИСТЕМА ЗВАНИЙ И БАНОВ (ПОЛНАЯ) ==========
     import json
     import os
@@ -4306,15 +4305,13 @@ def register_handlers():
             return True
         return get_user_rank(user_id) >= required_level
     
-    # === 0. НОВАЯ КОМАНДА: ПОЛУЧИТЬ ID ПОЛЬЗОВАТЕЛЯ ===
+    # === 0. ПОЛУЧЕНИЕ ID ПОЛЬЗОВАТЕЛЯ ===
     @bot.message_handler(commands=['getuserid'])
     def cmd_getuserid(message):
-        # Только для тебя
         if message.from_user.id != YOUR_ID:
             return
-        # Только в ЛС
         if message.chat.type != 'private':
-            bot.reply_to(message, "❌ Используй в личных сообщениях.")
+            bot.reply_to(message, "❌ Используй в ЛС.")
             return
     
         args = message.text.split()
@@ -4325,12 +4322,9 @@ def register_handlers():
         target_input = args[1]
         result = f"🔍 Информация о пользователе {target_input}\n\n"
     
-        # Пытаемся получить информацию
         try:
             if target_input.isdigit():
-                # Поиск по ID
                 user_id = int(target_input)
-                # Попробуем получить информацию через чаты
                 found = False
                 for chat_id in bot_chats:
                     try:
@@ -4352,25 +4346,13 @@ def register_handlers():
                 if not found:
                     result += "❌ Пользователь с таким ID не найден ни в одном чате."
             else:
-                # Поиск по username (сложнее, нужно пройти по чатам)
-                username = target_input.replace('@', '').lower()
-                found = False
-                for chat_id in bot_chats:
-                    try:
-                        # Получаем всех участников чата (только если бот админ)
-                        member = bot.get_chat_member(int(chat_id), 0)  # так не работает, нужен другой подход
-                        # Упрощённо: пробегаем по всем сохранённым пользователям? Пока пропустим.
-                        pass
-                    except:
-                        continue
                 result += "🔍 Поиск по username пока в разработке. Используй ID."
-    
         except Exception as e:
             result += f"❌ Ошибка: {e}"
     
         bot.reply_to(message, result, parse_mode="Markdown")
     
-        # === 1. ЛИЧНАЯ АДМИН-ПАНЕЛЬ ===
+    # === 1. ЛИЧНАЯ АДМИН-ПАНЕЛЬ ===
     @bot.message_handler(commands=['mychats'])
     def cmd_mychats(message):
         if message.from_user.id != YOUR_ID:
@@ -4485,7 +4467,7 @@ def register_handlers():
             bot.reply_to(message, f"🔇 {target.first_name} замучен на {mute_time} мин.")
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
-
+    
     @bot.message_handler(commands=['unmute'])
     def cmd_unmute(message):
         if not has_permission(message.from_user.id, 1):
@@ -4502,8 +4484,10 @@ def register_handlers():
             bot.restrict_chat_member(
                 chat_id, target.id,
                 permissions=telebot.types.ChatPermissions(
-                    can_send_messages=True, can_send_media_messages=True,
-                    can_send_polls=True, can_send_other_messages=True,
+                    can_send_messages=True,
+                    can_send_media_messages=True,
+                    can_send_polls=True,
+                    can_send_other_messages=True,
                     can_add_web_page_previews=True
                 )
             )
@@ -4595,30 +4579,14 @@ def register_handlers():
     
         args = message.text.split()
         if len(args) < 3:
-            bot.reply_to(message, "❌ Формат: /kill @username или /kill 123456789")
+            bot.reply_to(message, "❌ Формат: /kill ID_юзера ID_чата\nПример: /kill 123456789 -1001234567890")
             return
     
-        target_input = args[1]
-        target_id = None
-    
-        # Пытаемся получить ID
-        if target_input.isdigit():
-            target_id = int(target_input)
-        else:
-            username = target_input.replace('@', '')
-            # Пытаемся найти пользователя по username (сложно, упростим)
-            target_id = target_input  # пока оставим как строку
-    
-        # В каком чате баним?
-        if len(args) < 3:
-            bot.reply_to(message, "❌ Укажи чат (ID из /mychats)")
-            return
-    
-        chat_input = args[2]
         try:
-            chat_id = int(chat_input)
-        except:
-            bot.reply_to(message, "❌ ID чата должен быть числом.")
+            target_id = int(args[1])
+            chat_id = int(args[2])
+        except ValueError:
+            bot.reply_to(message, "❌ ID должны быть числами.")
             return
     
         # Проверяем, есть ли такой чат
@@ -4628,15 +4596,11 @@ def register_handlers():
     
         # Баним
         try:
-            if isinstance(target_id, int):
-                bot.ban_chat_member(chat_id, target_id)
-                bot.reply_to(message, f"✅ Пользователь {target_id} забанен в чате {chat_id}")
-            else:
-                # Если username — нужно получить ID (сложно, пропустим для простоты)
-                bot.reply_to(message, "⚠️ Бан по username временно недоступен. Используй ID.")
+            bot.ban_chat_member(chat_id, target_id)
+            bot.reply_to(message, f"✅ Пользователь {target_id} забанен в чате {chat_id}")
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка бана: {e}")
-
+    
     # ========== ОБРАБОТКА ПЕРЕСЛАННЫХ СООБЩЕНИЙ ==========
     @bot.message_handler(func=lambda message: message.forward_from is not None and message.chat.type == 'private')
     def handle_forwarded(message):
@@ -4663,61 +4627,7 @@ def register_handlers():
         btn4 = telebot.types.InlineKeyboardButton("📋 В игнор", callback_data=f"ignore_{user.id}")
         markup.add(btn1, btn2, btn3, btn4)
     
-        bot.reply_to(message, result, parse_mode="Markdown", reply_markup=markup)
-    
-    # Обработчик нажатий на кнопки
-    @bot.callback_query_handler(func=lambda call: True)
-    def callback_handler(call):
-        if call.from_user.id != YOUR_ID:
-            return
-    
-        data = call.data.split('_')
-        action = data[0]
-        user_id = int(data[1])
-    
-        if action == 'ban':
-            # Здесь нужно будет выбрать чат
-            bot.answer_callback_query(call.id, "🔨 Выбери чат для бана")
-            # Отправляем список чатов
-            show_chats_for_action(call.message.chat.id, user_id, 'ban')
-        elif action == 'mute':
-            bot.answer_callback_query(call.id, "🔇 Выбери чат для мута")
-            show_chats_for_action(call.message.chat.id, user_id, 'mute')
-        elif action == 'where':
-            where_is_user(call.message.chat.id, user_id)
-        elif action == 'ignore':
-            add_to_ignore(user_id)
-            bot.answer_callback_query(call.id, "✅ Добавлен в игнор-лист")
-    
-    def show_chats_for_action(chat_id, user_id, action):
-        text = f"📋 Выбери чат для действия\n\n"
-        for cid, info in bot_chats.items():
-            try:
-                member = bot.get_chat_member(int(cid), bot.get_me().id)
-                if member.status in ['administrator', 'creator']:
-                    text += f"• {cid} — {info['name']}\n"
-            except:
-                pass
-        bot.send_message(chat_id, text, parse_mode="Markdown")
-    
-    def where_is_user(chat_id, user_id):
-        text = f"📍 Где появлялся пользователь {user_id}\n\n"
-        found = False
-        for cid, info in bot_chats.items():
-            try:
-                member = bot.get_chat_member(int(cid), user_id)
-                text += f"• {info['name']} — {'✅ есть' if member else '❌ нет'}\n"
-                found = True
-            except:
-                pass
-        if not found:
-            text += "❌ Не найден ни в одном чате"
-        bot.send_message(chat_id, text, parse_mode="Markdown")
-    
-    def add_to_ignore(user_id):
-        # Функция для добавления в игнор-лист (пока заглушка)
-        print(f"✅ Добавлено в игнор: {user_id}")
-
+        bot.reply_to(message, result, parse_mode="Markdown", reply_markup=markup)    
     # ========== АНТИССЫЛКА ДЛЯ КАЖДОГО ЧАТА ==========
     import json
     import os
