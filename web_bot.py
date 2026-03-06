@@ -4487,7 +4487,7 @@ def register_handlers():
             bot.reply_to(message, f"❌ Ошибка: {e}")
     
         @bot.message_handler(commands=['unmute'])
-    def cmd_unmute(message):
+        def cmd_unmute(message):
         if not has_permission(message.from_user.id, 1):
             return
     
