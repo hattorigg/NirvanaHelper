@@ -4485,15 +4485,15 @@ def register_handlers():
             bot.reply_to(message, f"🔇 {target.first_name} замучен на {mute_time} мин.")
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
-    
+
     @bot.message_handler(commands=['unmute'])
     def cmd_unmute(message):
-    if not has_permission(message.from_user.id, 1):
-        return
+        if not has_permission(message.from_user.id, 1):
+            return
     
-    if not message.reply_to_message:
-        bot.reply_to(message, "❌ Ответь на сообщение.")
-        return
+        if not message.reply_to_message:
+            bot.reply_to(message, "❌ Ответь на сообщение.")
+            return
     
         target = message.reply_to_message.from_user
         chat_id = message.chat.id
