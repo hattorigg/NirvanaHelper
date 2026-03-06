@@ -4252,382 +4252,160 @@ def register_handlers():
             bot.reply_to(message, f"❌ Критическая ошибка: {e}")
             print(f"Ошибка в /holidays: {e}")
     # ========== КОНЕЦ /holidays ==========
-    # ========== СИСТЕМА ЗВАНИЙ И БАНОВ (ПОЛНАЯ) ==========
+    # ========== ЖИВОЙ КВЕСТ С ИИ ==========
+    import requests
     import json
     import os
     import time
     
-    # === Файлы для хранения ===
-    RANKS_FILE = "user_ranks.json"
-    CHATS_FILE = "bot_chats.json"
-    YOUR_ID = 6001013593
+    STORY_FILE = "story_states.json"
+    GROUP_STORY_FILE = "group_story.json"
+    YANDEX_API_KEY = os.environ.get('YANDEX_API_KEY', '')
     
-    # === Загрузка и сохранение ===
-    def load_json(file, default={}):
-        if os.path.exists(file):
+    if not YANDEX_API_KEY:
+        print("⚠️ ВНИМАНИЕ: YANDEX_API_KEY не задан! Квесты не будут работать.")
+    
+    def load_stories():
+        if os.path.exists(STORY_FILE):
             try:
-                with open(file, "r") as f:
+                with open(STORY_FILE, "r") as f:
                     return json.load(f)
             except:
-                return default
-        return default
+                return {}
+        return {}
     
-    def save_json(file, data):
+    def save_stories(stories):
         try:
-            with open(file, "w") as f:
+            with open(STORY_FILE, "w") as f:
+                json.dump(stories, f, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения историй: {e}")
+    
+    def load_group_story(chat_id):
+        if os.path.exists(GROUP_STORY_FILE):
+            try:
+                with open(GROUP_STORY_FILE, "r") as f:
+                    data = json.load(f)
+                    return data.get(str(chat_id), "")
+            except:
+                return ""
+        return ""
+    
+    def save_group_story(chat_id, story):
+        data = {}
+        if os.path.exists(GROUP_STORY_FILE):
+            try:
+                with open(GROUP_STORY_FILE, "r") as f:
+                    data = json.load(f)
+            except:
+                pass
+        data[str(chat_id)] = story
+        try:
+            with open(GROUP_STORY_FILE, "w") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            print(f"Ошибка сохранения {file}: {e}")
+            print(f"Ошибка сохранения групповой истории: {e}")
     
-    user_ranks = load_json(RANKS_FILE)
-    bot_chats = load_json(CHATS_FILE)  # хранит все чаты, где был бот
+    user_stories = load_stories()
     
-    # === Сохраняем каждый чат, где появилось сообщение ===
-    @bot.message_handler(func=lambda message: True)
-    def track_chats(message):
-        chat_id = str(message.chat.id)
-        if chat_id not in bot_chats:
-            chat_info = {
-                'id': chat_id,
-                'name': message.chat.title or f"Личка с {message.chat.first_name}" or f"Чат {chat_id}",
-                'type': message.chat.type,
-                'first_seen': time.time()
+    def ask_yandex_gpt(prompt, context=""):
+        if not YANDEX_API_KEY:
+            return "❌ API-ключ не настроен. Обратись к создателю."
+    
+        try:
+            url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+            headers = {
+                "Authorization": f"Api-Key {YANDEX_API_KEY}",
+                "Content-Type": "application/json"
             }
-            bot_chats[chat_id] = chat_info
-            save_json(CHATS_FILE, bot_chats)
-    
-    # === Проверка прав ===
-    def get_user_rank(user_id):
-        return user_ranks.get(str(user_id), 0)
-    
-    def has_permission(user_id, required_level):
-        if user_id == YOUR_ID:
-            return True
-        return get_user_rank(user_id) >= required_level
-    
-    # === 0. ПОЛУЧЕНИЕ ID ПОЛЬЗОВАТЕЛЯ ===
-    @bot.message_handler(commands=['getuserid'])
-    def cmd_getuserid(message):
-        if message.from_user.id != YOUR_ID:
-            return
-        if message.chat.type != 'private':
-            bot.reply_to(message, "❌ Используй в ЛС.")
-            return
-    
-        args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "❌ Укажи @username или ID пользователя.\nПример: /getuserid @durov")
-            return
-    
-        target_input = args[1]
-        result = f"🔍 Информация о пользователе {target_input}\n\n"
-    
-        try:
-            if target_input.isdigit():
-                user_id = int(target_input)
-                found = False
-                for chat_id in bot_chats:
-                    try:
-                        member = bot.get_chat_member(int(chat_id), user_id)
-                        user = member.user
-                        result += f"ID: {user.id}\n"
-                        result += f"Имя: {user.first_name}\n"
-                        if user.last_name:
-                            result += f"Фамилия: {user.last_name}\n"
-                        if user.username:
-                            result += f"Username: @{user.username}\n"
-                        result += f"Язык: {user.language_code or 'не указан'}\n"
-                        result += f"Бот: {'✅' if user.is_bot else '❌'}\n"
-                        result += f"Найден в чате: {bot_chats[chat_id]['name']}\n"
-                        found = True
-                        break
-                    except:
-                        continue
-                if not found:
-                    result += "❌ Пользователь с таким ID не найден ни в одном чате."
+            data = {
+                "model": "yandexgpt-lite",
+                "messages": [
+                    {
+                        "role": "system",
+                        "text": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."
+                    },
+                    {
+                        "role": "user",
+                        "text": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"
+                    }
+                ]
+            }
+            response = requests.post(url, headers=headers, json=data, timeout=15)
+            if response.status_code == 200:
+                result = response.json()
+                return result['result']['message']['text']
             else:
-                result += "🔍 Поиск по username пока в разработке. Используй ID."
+                return f"❌ Ошибка API: {response.status_code}"
         except Exception as e:
-            result += f"❌ Ошибка: {e}"
+            return f"❌ Ошибка: {e}"
     
-        bot.reply_to(message, result, parse_mode="Markdown")
+    @bot.message_handler(commands=['quest'])
+    def cmd_quest(message):
+        user_id = str(message.from_user.id)
+        text = message.text.replace('/quest', '', 1).strip().lower()
     
-    # === 1. ЛИЧНАЯ АДМИН-ПАНЕЛЬ ===
-    @bot.message_handler(commands=['mychats'])
-    def cmd_mychats(message):
-        if message.from_user.id != YOUR_ID:
-            return
-        if message.chat.type != 'private':
-            bot.reply_to(message, "❌ Используй в ЛС.")
-            return
-    
-        status_msg = bot.reply_to(message, "🔍 Собираю информацию о чатах...")
-    
-        if not bot_chats:
-            bot.edit_message_text("😕 Бот ещё не был ни в одном чате.", chat_id=message.chat.id, message_id=status_msg.message_id)
+        if text == 'начать' or text == 'start':
+            start_prompt = "Начни новую историю. Игрок просыпается в загадочном месте. Опиши обстановку одним-двумя предложениями."
+            response = ask_yandex_gpt(start_prompt, "")
+            user_stories[user_id] = response
+            save_stories(user_stories)
+            bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}")
             return
     
-        result = "📋 Все чаты, где был бот:\n\n"
-        for chat_id, info in bot_chats.items():
-            type_emoji = {'private': '👤', 'group': '👥', 'supergroup': '👥', 'channel': '📢'}.get(info['type'], '❓')
-            
-            # Проверяем, админ ли бот сейчас
-            bot_admin = "❌"
-            try:
-                member = bot.get_chat_member(int(chat_id), bot.get_me().id)
-                if member.status in ['administrator', 'creator']:
-                    bot_admin = "✅"
-            except:
-                bot_admin = "🚫"
-    
-            result += f"{type_emoji} {info['name']}\n"
-            result += f"└ ID: {chat_id}\n"
-            result += f"└ Бот админ: {bot_admin}\n\n"
-    
-        bot.edit_message_text(result[:4000], chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="Markdown")
-    
-    # === 2. УПРАВЛЕНИЕ ЗВАНИЯМИ ===
-    @bot.message_handler(commands=['setrank'])
-    def cmd_setrank(message):
-        if message.from_user.id != YOUR_ID:
-            bot.reply_to(message, "❌ Только владелец.")
+        if text == 'сброс' or text == 'reset':
+            if user_id in user_stories:
+                del user_stories[user_id]
+                save_stories(user_stories)
+                bot.reply_to(message, "✅ Твоя история сброшена. Можешь начать новую командой /quest начать")
+            else:
+                bot.reply_to(message, "❌ У тебя нет активной истории.")
             return
     
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на сообщение пользователя.")
+        if not text:
+            bot.reply_to(message, "❌ Используй:\n/quest начать — начать новую историю\n/quest действие — продолжить\n/quest сброс — сбросить")
             return
     
-        args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "❌ Укажи уровень: 1-4")
+        if user_id not in user_stories:
+            bot.reply_to(message, "❌ Сначала начни историю: /quest начать")
             return
     
-        try:
-            level = int(args[1])
-            if level < 1 or level > 4:
-                raise ValueError
-        except:
-            bot.reply_to(message, "❌ Уровень должен быть 1-4.")
+        context = user_stories[user_id]
+        response = ask_yandex_gpt(text, context)
+        user_stories[user_id] = context + "\n" + text + "\n" + response
+        save_stories(user_stories)
+        bot.reply_to(message, f"📖 ...\n\n{response}")
+    
+    @bot.message_handler(commands=['groupquest'])
+    def cmd_groupquest(message):
+        chat_id = str(message.chat.id)
+        text = message.text.replace('/groupquest', '', 1).strip().lower()
+    
+        if text == 'начать' or text == 'start':
+            start_prompt = "Начни новую групповую историю. Несколько героев собираются вместе. Опиши место и ситуацию."
+            response = ask_yandex_gpt(start_prompt, "")
+            save_group_story(chat_id, response)
+            bot.reply_to(message, f"🌍 Общая история для всех начинается...\n\n{response}")
             return
     
-        target = message.reply_to_message.from_user
-        user_ranks[str(target.id)] = level
-        save_json(RANKS_FILE, user_ranks)
-    
-        rank_names = ["", "🕊️ Хранитель тишины", "⚔️ Страж порядка", "🤴 Князь уюта", "👑 Создатель"]
-        bot.reply_to(message, f"✅ {target.first_name} теперь {rank_names[level]}")
-    
-    @bot.message_handler(commands=['delrank'])
-    def cmd_delrank(message):
-        if message.from_user.id != YOUR_ID:
+        if text == 'сброс' or text == 'reset':
+            save_group_story(chat_id, "")
+            bot.reply_to(message, "✅ Групповая история сброшена.")
             return
     
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на сообщение.")
+        if not text:
+            bot.reply_to(message, "❌ Используй:\n/groupquest начать — начать общую историю\n/groupquest действие — продолжить\n/groupquest сброс — сбросить")
             return
     
-        target = message.reply_to_message.from_user
-        if str(target.id) in user_ranks:
-            del user_ranks[str(target.id)]
-            save_json(RANKS_FILE, user_ranks)
-            bot.reply_to(message, f"✅ У {target.first_name} сняты звания.")
-        else:
-            bot.reply_to(message, f"👤 У {target.first_name} нет званий.")
-    
-    @bot.message_handler(commands=['myrank'])
-    def cmd_myrank(message):
-        level = get_user_rank(message.from_user.id)
-        rank_names = ["👤 Пользователь", "🕊️ Хранитель тишины", "⚔️ Страж порядка", "🤴 Князь уюта", "👑 Создатель"]
-        if message.from_user.id == YOUR_ID:
-            level = 4
-        bot.reply_to(message, f"🎖️ Твоё звание: {rank_names[level]}")
-    
-    # === 3. МОДЕРАТОРСКИЕ КОМАНДЫ ===
-    @bot.message_handler(commands=['mute'])
-    def cmd_mute(message):
-        if not has_permission(message.from_user.id, 1):
-            bot.reply_to(message, "❌ Недостаточно прав (нужен уровень 1+)")
+        context = load_group_story(chat_id)
+        if not context:
+            bot.reply_to(message, "❌ Сначала начни общую историю: /groupquest начать")
             return
     
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на сообщение.")
-            return
-    
-        target = message.reply_to_message.from_user
-        chat_id = message.chat.id
-        args = message.text.split()
-        mute_time = int(args[1]) if len(args) > 1 and args[1].isdigit() else 60
-    
-        try:
-            bot.restrict_chat_member(
-                chat_id, target.id,
-                until_date=int(time.time()) + mute_time * 60,
-                permissions=telebot.types.ChatPermissions(can_send_messages=False)
-            )
-            bot.reply_to(message, f"🔇 {target.first_name} замучен на {mute_time} мин.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-    
-    @bot.message_handler(commands=['unmute'])
-    def cmd_unmute(message):
-        if not has_permission(message.from_user.id, 1):
-            return
-    
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на сообщение.")
-            return
-    
-        target = message.reply_to_message.from_user
-        chat_id = message.chat.id
-    
-        try:
-            bot.restrict_chat_member(
-                chat_id, target.id,
-                permissions=telebot.types.ChatPermissions(
-                    can_send_messages=True,
-                    can_send_media_messages=True,
-                    can_send_polls=True,
-                    can_send_other_messages=True,
-                    can_add_web_page_previews=True
-                )
-            )
-            bot.reply_to(message, f"🔊 {target.first_name} размучен.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-    
-    @bot.message_handler(commands=['ban'])
-    def cmd_ban(message):
-        if not has_permission(message.from_user.id, 2):
-            bot.reply_to(message, "❌ Недостаточно прав (нужен уровень 2+)")
-            return
-    
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на сообщение.")
-            return
-    
-        target = message.reply_to_message.from_user
-        chat_id = message.chat.id
-    
-        try:
-            bot.ban_chat_member(chat_id, target.id)
-            bot.reply_to(message, f"🔨 {target.first_name} забанен.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-    
-    @bot.message_handler(commands=['unban'])
-    def cmd_unban(message):
-        if not has_permission(message.from_user.id, 2):
-            bot.reply_to(message, "❌ Недостаточно прав.")
-            return
-    
-        args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "❌ Укажи ID: /unban 123456789")
-            return
-    
-        try:
-            target_id = int(args[1])
-            chat_id = message.chat.id
-            bot.unban_chat_member(chat_id, target_id)
-            bot.reply_to(message, f"✅ Пользователь {target_id} разбанен.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-    
-    # === 4. СЕКРЕТНЫЕ КОМАНДЫ ДЛЯ ТЕБЯ ===
-    @bot.message_handler(commands=['бб'])
-    def cmd_secret_ban(message):
-        if message.from_user.id != YOUR_ID:
-            return
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на сообщение.")
-            return
-        target = message.reply_to_message.from_user
-        try:
-            bot.ban_chat_member(message.chat.id, target.id)
-            bot.reply_to(message, f"💀 {target.first_name} отправлен в бездну.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-    
-    @bot.message_handler(commands=['бм'])
-    def cmd_secret_mute(message):
-        if message.from_user.id != YOUR_ID:
-            return
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на сообщение.")
-            return
-        target = message.reply_to_message.from_user
-        args = message.text.split()
-        mute_time = int(args[1]) if len(args) > 1 and args[1].isdigit() else 60
-        try:
-            bot.restrict_chat_member(
-                message.chat.id, target.id,
-                until_date=int(time.time()) + mute_time * 60,
-                permissions=telebot.types.ChatPermissions(can_send_messages=False)
-            )
-            bot.reply_to(message, f"🤫 {target.first_name} затих на {mute_time} мин.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
-    
-    # === 5. ГЛАВНАЯ ФИШКА: БАН ПО ID/ЮЗЕРНЕЙМУ ИЗ ЛС ===
-    @bot.message_handler(commands=['kill'])
-    def cmd_kill(message):
-        if message.from_user.id != YOUR_ID:
-            return
-        if message.chat.type != 'private':
-            bot.reply_to(message, "❌ Используй в ЛС.")
-            return
-    
-        args = message.text.split()
-        if len(args) < 3:
-            bot.reply_to(message, "❌ Формат: /kill ID_юзера ID_чата\nПример: /kill 123456789 -1001234567890")
-            return
-    
-        try:
-            target_id = int(args[1])
-            chat_id = int(args[2])
-        except ValueError:
-            bot.reply_to(message, "❌ ID должны быть числами.")
-            return
-    
-        # Проверяем, есть ли такой чат
-        if str(chat_id) not in bot_chats:
-            bot.reply_to(message, "❌ Бот не знает этот чат. Сначала напиши туда что-нибудь.")
-            return
-    
-        # Баним
-        try:
-            bot.ban_chat_member(chat_id, target_id)
-            bot.reply_to(message, f"✅ Пользователь {target_id} забанен в чате {chat_id}")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка бана: {e}")
-    
-    # ========== ОБРАБОТКА ПЕРЕСЛАННЫХ СООБЩЕНИЙ ==========
-    @bot.message_handler(func=lambda message: message.forward_from is not None and message.chat.type == 'private')
-    def handle_forwarded(message):
-        # Только для тебя
-        if message.from_user.id != YOUR_ID:
-            return
-    
-        user = message.forward_from
-        result = f"👤 Информация о пользователе\n\n"
-        result += f"ID: {user.id}\n"
-        result += f"Имя: {user.first_name}\n"
-        if user.last_name:
-            result += f"Фамилия: {user.last_name}\n"
-        if user.username:
-            result += f"Username: @{user.username}\n"
-        result += f"Бот: {'✅' if user.is_bot else '❌'}\n"
-        result += f"Язык: {user.language_code or 'не указан'}"
-    
-        # Кнопки для действий
-        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-        btn1 = telebot.types.InlineKeyboardButton("🔨 Забанить", callback_data=f"ban_{user.id}")
-        btn2 = telebot.types.InlineKeyboardButton("🔇 Замутить", callback_data=f"mute_{user.id}")
-        btn3 = telebot.types.InlineKeyboardButton("📍 Где был", callback_data=f"where_{user.id}")
-        btn4 = telebot.types.InlineKeyboardButton("📋 В игнор", callback_data=f"ignore_{user.id}")
-        markup.add(btn1, btn2, btn3, btn4)
-    
-        bot.reply_to(message, result, parse_mode="Markdown", reply_markup=markup)    
+        response = ask_yandex_gpt(text, context)
+        new_context = context + "\n" + text + "\n" + response
+        save_group_story(chat_id, new_context)
+        bot.reply_to(message, f"📜 ...\n\n{response}")
     # ========== АНТИССЫЛКА ДЛЯ КАЖДОГО ЧАТА ==========
     import json
     import os
