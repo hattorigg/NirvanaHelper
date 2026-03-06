@@ -4253,11 +4253,6 @@ def register_handlers():
             print(f"Ошибка в /holidays: {e}")
     # ========== КОНЕЦ /holidays ==========
     # ========== ЖИВОЙ КВЕСТ С ИИ ==========
-    import requests
-    import json
-    import os
-    import time
-    
     STORY_FILE = "story_states.json"
     GROUP_STORY_FILE = "group_story.json"
     YANDEX_API_KEY = os.environ.get('YANDEX_API_KEY', '')
