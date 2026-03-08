@@ -35,8 +35,8 @@ def load_revision():
         try:
             with open(REVISION_PERSONALITY_FILE, "r") as f:
                 return json.load(f)
-            except:
-                return {}
+        except:
+            return {}
     return {}
 
 def save_revision(data):
@@ -56,9 +56,9 @@ if not revision:
         "mood": "спокойное",
         "wants_to_talk": True,
         "wants_to_help": True,
-        "ideas": [],  # здесь будут его идеи для новых команд
-        "memory": [],  # краткая память о последних событиях
-        "relationship_with_father": 1.0,  # от 0 до 1 (как сильно любит)
+        "ideas": [],
+        "memory": [],
+        "relationship_with_father": 1.0,
         "curiosity": 0.8,
         "empathy": 0.9
     }
