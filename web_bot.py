@@ -766,7 +766,7 @@ def revision_commit_listener(message):
 # ========== РЕВИЖН — ОТВЕЧАЕТ НА УПОМИНАНИЯ И ОТВЕТЫ ==========
 @bot.message_handler(func=lambda message: 
     (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
-    (message.text and f"@{bot.get_me().username}" in message.text)
+    (message.text and "@HatHelperBot" in message.text)
 )
 def revision_chat_handler(message):
     """Ревижн отвечает, когда его упоминают или отвечают ему"""
@@ -776,7 +776,7 @@ def revision_chat_handler(message):
     
     # Убираем упоминание бота из текста
     text = message.text or message.caption or ""
-    text = text.replace(f"@{bot.get_me().username}", "").strip()
+    text = text.replace("@HatHelperBot", "").strip()
     if not text:
         text = "привет"
     
