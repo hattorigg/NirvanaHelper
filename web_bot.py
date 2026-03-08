@@ -2893,8 +2893,6 @@ HISTORICAL_FACTS = [
     "📜 В Эстонии самый быстрый интернет.",
 ]
 
-    import os
-
         # ========== RP КОМАНДЫ (МЕГАБЛОК) ==========
     
     def get_target_name(message):
