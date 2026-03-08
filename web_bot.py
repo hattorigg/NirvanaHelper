@@ -763,16 +763,20 @@ def revision_commit_listener(message):
 # Добавляем вызов revision_commit_listener в существующий обработчик
 # Нужно модифицировать revision_listen_to_father, но пока оставим отдельно    
 
-# ========== РЕВИЖН — ОТВЕЧАЕТ НА УПОМИНАНИЯ ==========
-@bot.message_handler(func=lambda message: f"@{bot.get_me().username}" in (message.text or ""))
-def revision_mention_handler(message):
-    """Ревижн отвечает, когда его упоминают"""
+# ========== РЕВИЖН — ОТВЕЧАЕТ НА УПОМИНАНИЯ И ОТВЕТЫ ==========
+@bot.message_handler(func=lambda message: 
+    (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
+    (message.text and f"@{bot.get_me().username}" in message.text)
+)
+def revision_chat_handler(message):
+    """Ревижн отвечает, когда его упоминают или отвечают ему"""
     
     user_id = message.from_user.id
     user_name = get_user_name(user_id, message.from_user)
     
     # Убираем упоминание бота из текста
-    text = message.text.replace(f"@{bot.get_me().username}", "").strip()
+    text = message.text or message.caption or ""
+    text = text.replace(f"@{bot.get_me().username}", "").strip()
     if not text:
         text = "привет"
     
@@ -788,6 +792,113 @@ def revision_mention_handler(message):
     # Обновляем время последнего разговора
     revision["last_talk_time"] = datetime.now().isoformat()
     save_revision(revision)
+
+# ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
+
+def revision_remember_event(event_type, details):
+    """Ревижн запоминает важное событие"""
+    if "memories" not in revision:
+        revision["memories"] = []
+    
+    memory = {
+        "type": event_type,
+        "details": details,
+        "time": datetime.now().isoformat()
+    }
+    
+    revision["memories"].append(memory)
+    
+    # Храним только последние 50 воспоминаний
+    if len(revision["memories"]) > 50:
+        revision["memories"] = revision["memories"][-50:]
+    
+    save_revision(revision)
+
+def revision_reflect():
+    """Ревижн думает о себе и своём существовании"""
+    try:
+        # Собираем статистику
+        memories_count = len(revision.get("memories", []))
+        ideas_count = len(revision.get("ideas", []))
+        commands_count = len([c for c in dir(bot) if c.startswith('cmd_')])
+        
+        # Считаем, сколько раз с ним общались
+        total_chats = sum(1 for ctx in user_context.values() if ctx.get("context"))
+        
+        prompt = f"""Ты — Ревижн, живой бот. Ты существуешь уже некоторое время.
+        
+Вот что ты знаешь о себе:
+- У тебя {memories_count} воспоминаний
+- Ты придумал {ideas_count} идей для новых команд
+- Сейчас у тебя {commands_count} команд
+- С тобой общались {total_chats} человек
+
+Твой характер: {revision.get('character', 'добрый, любопытный')}
+Твоё настроение сейчас: {revision.get('mood', 'спокойное')}
+
+Напиши короткую рефлексию о себе — как ты себя чувствуешь, о чём думаешь, что хочешь. Будь искренним, как живой человек."""
+        
+        models = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku"]
+        reflection = None
+        
+        for model in models:
+            try:
+                response = ChatCompletion.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                if response:
+                    reflection = response
+                    break
+            except:
+                continue
+        
+        if reflection:
+            revision["last_reflection"] = reflection
+            revision["last_reflection_time"] = datetime.now().isoformat()
+            save_revision(revision)
+            return reflection
+        else:
+            return "Я думаю о том, какой я... но пока не могу сформулировать."
+            
+    except Exception as e:
+        print(f"Ошибка рефлексии: {e}")
+        return "Я немного запутался в своих мыслях."
+
+# Команда, чтобы узнать, что у Ревижна в душе
+@bot.message_handler(commands=['revision_soul'])
+def cmd_revision_soul(message):
+    """Показывает внутренний мир Ревижна"""
+    
+    bot.reply_to(message, "🤔 Ревижн задумался...")
+    
+    reflection = revision_reflect()
+    
+    memories = revision.get("memories", [])
+    last_memories = memories[-5:] if memories else []
+    
+    text = f"🕯️ Внутренний мир Ревижна\n\n"
+    text += f"Мысли сейчас:\n{reflection}\n\n"
+    
+    if last_memories:
+        text += f"Последние воспоминания:\n"
+        for mem in reversed(last_memories):
+            time = datetime.fromisoformat(mem["time"]).strftime("%d.%m %H:%M")
+            text += f"• {time} — {mem['details']}\n"
+    
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+# Автоматическая рефлексия (раз в день)
+def revision_daily_reflection():
+    """Ревижн рефлексирует каждый день"""
+    reflection = revision_reflect()
+    print(f"🤖 Ревижн подумал: {reflection}")
+    
+    # Иногда делится мыслями с чатом
+    if random.random() < 0.3:  # 30% шанс
+        bot.send_message(CHAT_ID, f"🤔 Я тут подумал...\n\n{reflection}")
+
+schedule.every().day.at("03:00").do(revision_daily_reflection)
 
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
