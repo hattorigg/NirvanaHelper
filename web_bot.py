@@ -4373,7 +4373,51 @@ def register_handlers():
         response = ask_gpt(text, context)
         new_context = context + "\n" + text + "\n" + response
         save_group_story(chat_id, new_context)
-        bot.reply_to(message, f"📜 ...\n\n{response}")    
+        bot.reply_to(message, f"📜 ...\n\n{response}")
+    # ========== ИИ-ЧАТ (ВОПРОСЫ) ==========
+    @bot.message_handler(commands=['ask'])
+    def cmd_ask(message):
+        question = message.text.replace('/ask', '', 1).strip()
+        if not question:
+            bot.reply_to(message, "❓ Напиши вопрос после /ask, например:\n/ask Как стать лучше?")
+            return
+    
+        wait_msg = bot.reply_to(message, "🤔 Думаю...")
+    
+        try:
+            from g4f import ChatCompletion
+            
+            models_to_try = [
+                "gpt-4",
+                "gpt-3.5-turbo",
+                "gpt-4-turbo",
+                "claude-3-haiku",
+                "gemini-pro"
+            ]
+            
+            answer = None
+            for model in models_to_try:
+                try:
+                    response = ChatCompletion.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": "Ты — уютный, тёплый бот-помощник. Отвечай как друг, с душой, с эмодзи. Будь вежлив и человечен. Отвечай кратко, но по делу."},
+                            {"role": "user", "content": question}
+                        ]
+                    )
+                    if response:
+                        answer = response
+                        break
+                except:
+                    continue
+            
+            if answer:
+                bot.edit_message_text(f"🧠 {answer}", chat_id=message.chat.id, message_id=wait_msg.message_id)
+            else:
+                bot.edit_message_text("😵 Не удалось получить ответ. Попробуй позже.", chat_id=message.chat.id, message_id=wait_msg.message_id)
+                
+        except Exception as e:
+            bot.edit_message_text(f"❌ Ошибка: {e}", chat_id=message.chat.id, message_id=wait_msg.message_id)        
     # ========== АНТИССЫЛКА ДЛЯ КАЖДОГО ЧАТА ==========
     import json
     import os
