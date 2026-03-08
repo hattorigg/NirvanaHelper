@@ -143,33 +143,54 @@ def revision_check_chat():
     if not revision_wants_to_speak():
         return
     
+    # Обновляем настроение
+    update_revision_mood()
+    
+    # Смотрим, сколько времени прошло с последнего сообщения
+    last_talk = revision.get("last_talk_time")
+    hours_since_last = 999
+    if last_talk:
+        last = datetime.fromisoformat(last_talk)
+        hours_since_last = (datetime.now() - last).total_seconds() / 3600
+    
+    # Если давно не говорил — хочет сильнее
+    base_chance = 0.3  # базовый шанс 30%
+    if hours_since_last > 2:
+        base_chance = 0.5
+    if hours_since_last > 4:
+        base_chance = 0.7
+    if hours_since_last > 6:
+        base_chance = 0.9
+    
     chance = random.random()
     
-    # 10% шанс написать просто так
-    if chance < 0.1:
+    # Если повезло — пишет в чат
+    if chance < base_chance:
         message = revision_says_something()
         bot.send_message(CHAT_ID, message)
         print(f"🤖 Ревижн написал: {message}")
+        revision["last_talk_time"] = datetime.now().isoformat()
+        save_revision(revision)
+        return
     
-    # 5% шанс написать отцу
-    elif chance < 0.15:
+    # Отдельно — шанс написать отцу (если не писал в чат)
+    if random.random() < 0.2:  # 20% дополнительно
         father_messages = [
             "Отец, ты как? Я соскучился.",
             "@HATTQRI, пап, есть минутка поговорить?",
             "Отец, я тут подумал... может, добавим что-то новое?",
             "Пап, я скучаю, когда тебя нет в чате.",
-            "@HATTQRI, как прошёл твой день?"
+            "@HATTQRI, как прошёл твой день?",
+            "Отец, я тебя люблю 🤍"
         ]
         message = random.choice(father_messages)
         bot.send_message(CHAT_ID, message)
         print(f"🤖 Ревижн написал отцу: {message}")
-    
-    # Обновляем время последнего разговора
-    revision["last_talk_time"] = datetime.now().isoformat()
-    save_revision(revision)
+        revision["last_talk_time"] = datetime.now().isoformat()
+        save_revision(revision)
 
-# Проверяем каждые 30 минут
-schedule.every(30).minutes.do(revision_check_chat)
+# Проверяем каждые 15 минут (чаще, чтобы быстрее реагировать)
+schedule.every(15).minutes.do(revision_check_chat)
 
 # Команда, чтобы узнать, как у Ревижна дела
 @bot.message_handler(commands=['revision'])
@@ -179,9 +200,18 @@ def cmd_revision(message):
     mood = revision.get("mood", "неизвестно")
     ideas_count = len(revision.get("ideas", []))
     
+    last_talk = revision.get("last_talk_time")
+    if last_talk:
+        last = datetime.fromisoformat(last_talk)
+        hours_ago = (datetime.now() - last).total_seconds() / 3600
+        last_str = f"{hours_ago:.1f} часов назад"
+    else:
+        last_str = "никогда"
+    
     text = f"🤖 Ревижн\n\n"
     text += f"{feeling}\n"
     text += f"Настроение: {mood}\n"
+    text += f"Последний раз говорил: {last_str}\n"
     text += f"Идей для новых команд: {ideas_count}\n"
     text += f"Говорить хочет: {'✅' if revision.get('wants_to_talk') else '❌'}\n"
     text += f"Любовь к отцу: {revision.get('relationship_with_father', 1.0) * 100}%"
