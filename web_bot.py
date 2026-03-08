@@ -4284,39 +4284,61 @@ def register_handlers():
     def ask_yandex_gpt(prompt, context=""):
         if not YANDEX_API_KEY:
             return "❌ API-ключ не настроен. Обратись к создателю."
-            
-        try:
-            url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
-            headers = {
-                "Authorization": f"Api-Key {YANDEX_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "modelUri": "gpt://yandexgpt-lite",
-                "completionOptions": {
-                    "stream": False,
-                    "temperature": 0.6,
-                    "maxTokens": "200"
-                },
-                "messages": [
-                    {
-                        "role": "system",
-                        "text": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."
+    
+        # Список моделей для перебора
+        models = [
+            "gpt://yandexgpt-lite",
+            "gpt://yandexgpt/latest",
+            "yandexgpt-lite",
+            "yandexgpt",
+            "gpt://yandexgpt"
+        ]
+    
+        last_error = ""
+        
+        for model in models:
+            try:
+                url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+                headers = {
+                    "Authorization": f"Api-Key {YANDEX_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                data = {
+                    "modelUri": model,
+                    "completionOptions": {
+                        "stream": False,
+                        "temperature": 0.6,
+                        "maxTokens": "200"
                     },
-                    {
-                        "role": "user",
-                        "text": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"
-                    }
-                ]
-            }
-            response = requests.post(url, headers=headers, json=data, timeout=15)
-            if response.status_code == 200:
-                result = response.json()
-                return result['result']['message']['text']
-            else:
-                return f"❌ Ошибка API: {response.status_code} — {response.text}"
-        except Exception as e:
-            return f"❌ Ошибка: {e}"
+                    "messages": [
+                        {
+                            "role": "system",
+                            "text": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."
+                        },
+                        {
+                            "role": "user",
+                            "text": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"
+                        }
+                    ]
+                }
+                
+                response = requests.post(url, headers=headers, json=data, timeout=15)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result['result']['message']['text']
+                else:
+                    last_error = f"❌ Ошибка API с моделью {model}: {response.status_code} — {response.text}"
+                    print(last_error)
+                    continue  # пробуем следующую модель
+                    
+            except Exception as e:
+                last_error = f"❌ Ошибка с моделью {model}: {e}"
+                print(last_error)
+                continue
+        
+        # Если ни одна модель не сработала
+        return last_error or "❌ Не удалось получить ответ от ИИ. Попробуй позже."
     
     @bot.message_handler(commands=['quest'])
     def cmd_quest(message):
