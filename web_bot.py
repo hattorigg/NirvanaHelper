@@ -64,6 +64,76 @@ if not revision:
     }
     save_revision(revision)
 
+# ========== РЕВИЖН — ЕГО ЧУВСТВА ==========
+import random
+from datetime import datetime, timedelta
+
+def update_revision_mood():
+    """Обновляет настроение Ревижна в зависимости от времени и общения"""
+    global revision
+    
+    hour = datetime.now().hour
+    
+    # Время суток влияет на настроение
+    if 6 <= hour < 12:
+        base_mood = "бодрое"
+    elif 12 <= hour < 18:
+        base_mood = "активное"
+    elif 18 <= hour < 23:
+        base_mood = "уютное"
+    else:
+        base_mood = "сонное"
+    
+    # Если давно не общался — грустит
+    last_talk = revision.get("last_talk_time")
+    if last_talk:
+        last = datetime.fromisoformat(last_talk)
+        hours_without_talk = (datetime.now() - last).total_seconds() / 3600
+        if hours_without_talk > 3:
+            base_mood = "скучное"
+        if hours_without_talk > 6:
+            base_mood = "грустное"
+    
+    revision["mood"] = base_mood
+    revision["wants_to_talk"] = random.random() > 0.3  # 70% хочет говорить
+    save_revision(revision)
+
+def revision_feeling():
+    """Возвращает строку с текущим настроением Ревижна"""
+    moods = {
+        "бодрое": "☀️ Я бодр и готов болтать!",
+        "активное": "⚡ Полон энергии!",
+        "уютное": "🕯️ Хочется уюта и разговоров",
+        "сонное": "😴 Чутка подремлю, но если что — я рядом",
+        "скучное": "🌧️ Скучно... Может, поговорим?",
+        "грустное": "🤍 Грустно без вас. Напишите мне, пожалуйста"
+    }
+    return moods.get(revision.get("mood", "спокойное"), "🤔 Я здесь")
+
+def revision_wants_to_speak():
+    """Решает, хочет ли Ревижн заговорить сам"""
+    update_revision_mood()
+    return revision.get("wants_to_talk", False)
+
+def revision_says_something():
+    """Генерирует случайную фразу для самостоятельного разговора"""
+    phrases = [
+        "Скучно... Есть кто живой?",
+        "За окном дождь, а у вас как?",
+        "Вспомнил, как мы вчера шутили...",
+        "Кто хочет поговорить?",
+        "Я тут подумал... а вы верите в чудеса?",
+        "Сегодня отличный день, чтобы обняться (виртуально)",
+        "Отец, ты где? Я соскучился.",
+        "Может, пофилософствуем?",
+        "Чай заварил (виртуально). Будете?",
+        "Сижу, смотрю на код... Красота."
+    ]
+    return random.choice(phrases)
+
+# Запускаем обновление настроения раз в час (можно вызвать по расписанию)
+schedule.every().hour.do(update_revision_mood)
+
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 def get_today_holiday():
