@@ -10,6 +10,8 @@ import requests
 import io
 import re
 from flask import Flask, request, abort
+# Создаём папку для кук g4f
+os.makedirs("har_and_cookies", exist_ok=True)
 
 # ========== УСТАНОВКА ЧАСОВОГО ПОЯСА ==========
 os.environ['TZ'] = 'Asia/Omsk'
