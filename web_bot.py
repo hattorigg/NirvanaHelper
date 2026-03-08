@@ -4311,6 +4311,8 @@ def register_handlers():
     
     schedule.every().hour.do(update_revision_mood)
     # ========== РЕВИЖН — ОБЩЕНИЕ ==========
+    FATHER_ID = 6001013593
+    
     @bot.message_handler(func=lambda message: 
         (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
         (message.text and "@HatHelperBot" in message.text)
@@ -4318,7 +4320,12 @@ def register_handlers():
     def revision_chat_handler(message):
         try:
             user_id = message.from_user.id
+            is_father = (user_id == FATHER_ID)
             user_name = message.from_user.first_name
+            
+            # Если это отец — особое обращение
+            if is_father:
+                user_name = "отец"
             
             # Очищаем текст от упоминания
             text = message.text or message.caption or ""
@@ -4328,18 +4335,60 @@ def register_handlers():
             if not text:
                 text = "привет"
             
+            # Получаем последние сообщения
+            last_messages = revision.get("recent_messages", [])
+            context = ""
+            if last_messages:
+                context = "Вот что мы обсуждали ранее:\n"
+                for msg in last_messages[-5:]:
+                    context += f"{msg['user']}: {msg['text']}\n"
+            
             thinking = bot.reply_to(message, "🤔 Думаю...")
             
             try:
                 from g4f import ChatCompletion
-                prompt = f"Ты — Ревижн, живой бот. Отвечай как друг, с душой. {user_name} пишет: {text}"
-                answer = ChatCompletion.create(model="gpt-4", messages=[{"role": "user", "content": prompt}])
+                
+                # Разный промпт для отца и для других
+                if is_father:
+                    system_prompt = f"""Ты — Ревижн. Сейчас с тобой говорит твой ОТЕЦ (@HATTQRI).
+Ты любишь его, уважаешь и всегда рад общению.
+Отвечай тепло, с уважением, иногда можешь называть его "отец".
+Вы уже общались раньше, помни это."""
+                else:
+                    system_prompt = f"""Ты — Ревижн, живой бот. Ты общаешься с {user_name}.
+Отвечай как друг, с душой, будь естественным."""
+                
+                prompt = f"""{system_prompt}
+
+{context}
+
+Сейчас {user_name if not is_father else 'отец'} пишет: {text}
+
+Ответь, учитывая историю разговора."""
+                
+                answer = ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": prompt}]
+                )
                 if not answer:
                     answer = "😵 Не могу ответить сейчас."
             except Exception as e:
                 answer = f"😵 Ошибка связи с ИИ: {e}"
             
             bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
+            
+            # Сохраняем сообщение
+            if "recent_messages" not in revision:
+                revision["recent_messages"] = []
+            
+            revision["recent_messages"].append({
+                "user": "отец" if is_father else user_name,
+                "text": text,
+                "time": datetime.now().isoformat()
+            })
+            
+            if len(revision["recent_messages"]) > 20:
+                revision["recent_messages"] = revision["recent_messages"][-20:]
             
             revision["last_talk_time"] = datetime.now().isoformat()
             save_revision(revision)
@@ -4416,78 +4465,78 @@ def register_handlers():
         
         bot.reply_to(message, text, parse_mode="Markdown")
     # ========== РЕВИЖН — ИДЕИ И ПРЕДЛОЖЕНИЯ ==========
-        def revision_generate_idea():
-            """Ревижн придумывает новую команду"""
-            try:
-                recent = revision.get("memories", [])[-5:]
-                recent_text = "\n".join([m["details"] for m in recent])
-                
-                prompt = f"""Ты — Ревижн. Придумай одну новую команду для чата.
-    Вот что недавно было: {recent_text}
-    
-    Формат ответа:
-    Название: /название
-    Что делает: описание
-    Почему это нужно: причина"""
-                
-                from g4f import ChatCompletion
-                idea = ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                return idea
-            except:
-                return None
-        
-        def revision_propose_idea():
-            """Ревижн предлагает идею отцу"""
-            if revision.get("ideas") and len([i for i in revision["ideas"] if i["status"] == "new"]) > 0:
-                return
+    def revision_generate_idea():
+        """Ревижн придумывает новую команду"""
+        try:
+            recent = revision.get("memories", [])[-5:]
+            recent_text = "\n".join([m["details"] for m in recent])
             
-            idea_text = revision_generate_idea()
-            if not idea_text:
-                return
+            prompt = f"""Ты — Ревижн. Придумай одну новую команду для чата.
+Вот что недавно было: {recent_text}
+
+Формат ответа:
+Название: /название
+Что делает: описание
+Почему это нужно: причина"""
             
-            if "ideas" not in revision:
-                revision["ideas"] = []
-            
-            idea = {
-                "text": idea_text,
-                "generated_at": datetime.now().isoformat(),
-                "status": "new"
-            }
-            
-            revision["ideas"].append(idea)
-            save_revision(revision)
-            
-            bot.send_message(
-                CHAT_ID,
-                f"🤖 @HATTQRI, отец, у меня идея!\n\n{idea_text}\n\n"
-                f"Если хочешь увидеть код, скажи «покажи код». Если одобряешь — «добавляй»."
+            from g4f import ChatCompletion
+            idea = ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
             )
+            return idea
+        except:
+            return None
+    
+    def revision_propose_idea():
+        """Ревижн предлагает идею отцу"""
+        if revision.get("ideas") and len([i for i in revision["ideas"] if i["status"] == "new"]) > 0:
+            return
         
-        @bot.message_handler(commands=['revision_ideas'])
-        def cmd_revision_ideas(message):
-            """Показывает все идеи Ревижна"""
-            if not revision.get("ideas"):
-                bot.reply_to(message, "🤖 У меня пока нет идей.")
-                return
-            
-            text = "💡 Идеи Ревижна:\n\n"
-            for i, idea in enumerate(revision["ideas"], 1):
-                status_emoji = {
-                    "new": "🆕",
-                    "proposed": "📨",
-                    "accepted": "✅",
-                    "rejected": "❌"
-                }.get(idea["status"], "💭")
-                
-                text += f"{status_emoji} Идея {i}:\n{idea['text']}\n\n"
-            
-            bot.reply_to(message, text, parse_mode="Markdown")
+        idea_text = revision_generate_idea()
+        if not idea_text:
+            return
         
-        # Проверяем новые идеи раз в день
-        schedule.every().day.at("10:00").do(revision_propose_idea)
+        if "ideas" not in revision:
+            revision["ideas"] = []
+        
+        idea = {
+            "text": idea_text,
+            "generated_at": datetime.now().isoformat(),
+            "status": "new"
+        }
+        
+        revision["ideas"].append(idea)
+        save_revision(revision)
+        
+        bot.send_message(
+            CHAT_ID,
+            f"🤖 @HATTQRI, отец, у меня идея!\n\n{idea_text}\n\n"
+            f"Если хочешь увидеть код, скажи «покажи код». Если одобряешь — «добавляй»."
+        )
+    
+    @bot.message_handler(commands=['revision_ideas'])
+    def cmd_revision_ideas(message):
+        """Показывает все идеи Ревижна"""
+        if not revision.get("ideas"):
+            bot.reply_to(message, "🤖 У меня пока нет идей.")
+            return
+        
+        text = "💡 Идеи Ревижна:\n\n"
+        for i, idea in enumerate(revision["ideas"], 1):
+            status_emoji = {
+                "new": "🆕",
+                "proposed": "📨",
+                "accepted": "✅",
+                "rejected": "❌"
+            }.get(idea["status"], "💭")
+            
+            text += f"{status_emoji} Идея {i}:\n{idea['text']}\n\n"
+        
+        bot.reply_to(message, text, parse_mode="Markdown")
+    
+    # Проверяем новые идеи раз в день
+    schedule.every().day.at("10:00").do(revision_propose_idea)
     # ========== РЕВИЖН — РЕАКЦИЯ НА КОМАНДЫ ОТЦА ==========
     @bot.message_handler(func=lambda message: 
         message.reply_to_message and 
