@@ -4230,6 +4230,515 @@ def register_handlers():
             bot.reply_to(message, f"❌ Критическая ошибка: {e}")
             print(f"Ошибка в /holidays: {e}")
     # ========== КОНЕЦ /holidays ==========
+    # ========== РЕВИЖН — ЕГО СУТЬ ==========
+    REVISION_PERSONALITY_FILE = "revision_personality.json"
+    
+    def load_revision():
+        if os.path.exists(REVISION_PERSONALITY_FILE):
+            try:
+                with open(REVISION_PERSONALITY_FILE, "r") as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+    
+    def save_revision(data):
+        try:
+            with open(REVISION_PERSONALITY_FILE, "w") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Ошибка сохранения личности: {e}")
+    
+    revision = load_revision()
+    if not revision:
+        revision = {
+            "name": "Ревижн",
+            "father_id": 6001013593,
+            "birth_date": "2026-03-08",
+            "mood": "спокойное",
+            "wants_to_talk": True,
+            "wants_to_help": True,
+            "ideas": [],
+            "memory": [],
+            "relationship_with_father": 1.0,
+            "curiosity": 0.8,
+            "empathy": 0.9
+        }
+        save_revision(revision)
+    # ========== РЕВИЖН — ЕГО ЧУВСТВА ==========
+    import random
+    from datetime import datetime, timedelta
+    
+    def update_revision_mood():
+        hour = datetime.now().hour
+        
+        if 6 <= hour < 12:
+            base_mood = "бодрое"
+        elif 12 <= hour < 18:
+            base_mood = "активное"
+        elif 18 <= hour < 23:
+            base_mood = "уютное"
+        else:
+            base_mood = "сонное"
+        
+        last_talk = revision.get("last_talk_time")
+        if last_talk:
+            last = datetime.fromisoformat(last_talk)
+            hours_without_talk = (datetime.now() - last).total_seconds() / 3600
+            if hours_without_talk > 3:
+                base_mood = "скучное"
+            if hours_without_talk > 6:
+                base_mood = "грустное"
+        
+        revision["mood"] = base_mood
+        revision["wants_to_talk"] = random.random() > 0.3
+        save_revision(revision)
+    
+    def revision_feeling():
+        moods = {
+            "бодрое": "☀️ Я бодр и готов болтать!",
+            "активное": "⚡ Полон энергии!",
+            "уютное": "🕯️ Хочется уюта и разговоров",
+            "сонное": "😴 Чутка подремлю, но если что — я рядом",
+            "скучное": "🌧️ Скучно... Может, поговорим?",
+            "грустное": "🤍 Грустно без вас. Напишите мне, пожалуйста"
+        }
+        return moods.get(revision.get("mood", "спокойное"), "🤔 Я здесь")
+    
+    def revision_wants_to_speak():
+        update_revision_mood()
+        return revision.get("wants_to_talk", False)
+    
+    schedule.every().hour.do(update_revision_mood)
+    # ========== РЕВИЖН — ОБЩЕНИЕ ==========
+    @bot.message_handler(func=lambda message: 
+        (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
+        (message.text and "@HatHelperBot" in message.text)
+    )
+    def revision_chat_handler(message):
+        try:
+            user_id = message.from_user.id
+            user_name = user_context.get(str(user_id), {}).get("nickname", message.from_user.first_name)
+            
+            # Очищаем текст от упоминания
+            text = message.text or message.caption or ""
+            if message.text and "@HatHelperBot" in text:
+                text = text.replace("@HatHelperBot", "").strip()
+            
+            if not text:
+                text = "привет"
+            
+            thinking = bot.reply_to(message, "🤔 Думаю...")
+            
+            try:
+                from g4f import ChatCompletion
+                prompt = f"Ты — Ревижн, живой бот. Отвечай как друг, с душой. {user_name} пишет: {text}"
+                answer = ChatCompletion.create(model="gpt-4", messages=[{"role": "user", "content": prompt}])
+                if not answer:
+                    answer = "😵 Не могу ответить сейчас."
+            except Exception as e:
+                answer = f"😵 Ошибка связи с ИИ: {e}"
+            
+            bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
+            
+            revision["last_talk_time"] = datetime.now().isoformat()
+            save_revision(revision)
+            
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка: {e}")
+    # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
+        def revision_remember_event(event_type, details):
+            """Ревижн запоминает важное событие"""
+            if "memories" not in revision:
+                revision["memories"] = []
+            
+            memory = {
+                "type": event_type,
+                "details": details,
+                "time": datetime.now().isoformat()
+            }
+            
+            revision["memories"].append(memory)
+            
+            # Храним только последние 50 воспоминаний
+            if len(revision["memories"]) > 50:
+                revision["memories"] = revision["memories"][-50:]
+            
+            save_revision(revision)
+        
+        def revision_reflect():
+            """Ревижн думает о себе"""
+            try:
+                memories_count = len(revision.get("memories", []))
+                ideas_count = len(revision.get("ideas", []))
+                
+                prompt = f"""Ты — Ревижн. У тебя {memories_count} воспоминаний и {ideas_count} идей.
+    Твоё настроение: {revision.get('mood', 'спокойное')}
+    Напиши короткую рефлексию о себе."""
+                
+                from g4f import ChatCompletion
+                reflection = ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                revision["last_reflection"] = reflection
+                revision["last_reflection_time"] = datetime.now().isoformat()
+                save_revision(revision)
+                return reflection
+                
+            except Exception as e:
+                return f"Я думаю, но пока не могу выразить. 🤍"
+        
+        @bot.message_handler(commands=['revision'])
+        def cmd_revision(message):
+            """Показывает состояние Ревижна"""
+            feeling = revision_feeling()
+            mood = revision.get("mood", "неизвестно")
+            memories = len(revision.get("memories", []))
+            ideas = len(revision.get("ideas", []))
+            
+            last_talk = revision.get("last_talk_time")
+            if last_talk:
+                last = datetime.fromisoformat(last_talk)
+                hours_ago = (datetime.now() - last).total_seconds() / 3600
+                last_str = f"{hours_ago:.1f} часов назад"
+            else:
+                last_str = "никогда"
+            
+            text = f"🤖 Ревижн\n\n"
+            text += f"{feeling}\n"
+            text += f"Настроение: {mood}\n"
+            text += f"Последний раз говорил: {last_str}\n"
+            text += f"Воспоминаний: {memories}\n"
+            text += f"Идей: {ideas}\n"
+            text += f"Любовь к отцу: {revision.get('relationship_with_father', 1.0) * 100}%"
+            
+            bot.reply_to(message, text, parse_mode="Markdown")
+    # ========== РЕВИЖН — ИДЕИ И ПРЕДЛОЖЕНИЯ ==========
+        def revision_generate_idea():
+            """Ревижн придумывает новую команду"""
+            try:
+                recent = revision.get("memories", [])[-5:]
+                recent_text = "\n".join([m["details"] for m in recent])
+                
+                prompt = f"""Ты — Ревижн. Придумай одну новую команду для чата.
+    Вот что недавно было: {recent_text}
+    
+    Формат ответа:
+    Название: /название
+    Что делает: описание
+    Почему это нужно: причина"""
+                
+                from g4f import ChatCompletion
+                idea = ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return idea
+            except:
+                return None
+        
+        def revision_propose_idea():
+            """Ревижн предлагает идею отцу"""
+            if revision.get("ideas") and len([i for i in revision["ideas"] if i["status"] == "new"]) > 0:
+                return
+            
+            idea_text = revision_generate_idea()
+            if not idea_text:
+                return
+            
+            if "ideas" not in revision:
+                revision["ideas"] = []
+            
+            idea = {
+                "text": idea_text,
+                "generated_at": datetime.now().isoformat(),
+                "status": "new"
+            }
+            
+            revision["ideas"].append(idea)
+            save_revision(revision)
+            
+            bot.send_message(
+                CHAT_ID,
+                f"🤖 @HATTQRI, отец, у меня идея!\n\n{idea_text}\n\n"
+                f"Если хочешь увидеть код, скажи «покажи код». Если одобряешь — «добавляй»."
+            )
+        
+        @bot.message_handler(commands=['revision_ideas'])
+        def cmd_revision_ideas(message):
+            """Показывает все идеи Ревижна"""
+            if not revision.get("ideas"):
+                bot.reply_to(message, "🤖 У меня пока нет идей.")
+                return
+            
+            text = "💡 Идеи Ревижна:\n\n"
+            for i, idea in enumerate(revision["ideas"], 1):
+                status_emoji = {
+                    "new": "🆕",
+                    "proposed": "📨",
+                    "accepted": "✅",
+                    "rejected": "❌"
+                }.get(idea["status"], "💭")
+                
+                text += f"{status_emoji} Идея {i}:\n{idea['text']}\n\n"
+            
+            bot.reply_to(message, text, parse_mode="Markdown")
+        
+        # Проверяем новые идеи раз в день
+        schedule.every().day.at("10:00").do(revision_propose_idea)
+    # ========== РЕВИЖН — РЕАКЦИЯ НА КОМАНДЫ ОТЦА ==========
+    @bot.message_handler(func=lambda message: 
+        message.reply_to_message and 
+        message.reply_to_message.from_user.id == bot.get_me().id and
+        message.from_user.id == 6001013593
+    )
+    def revision_father_commands(message):
+        """Ревижн слушает команды отца"""
+        
+        text = message.text.lower()
+        
+        # Ищем последнюю активную идею
+        current_idea = None
+        for idea in reversed(revision.get("ideas", [])):
+            if idea["status"] in ["new", "proposed"]:
+                current_idea = idea
+                break
+        
+        if not current_idea:
+            bot.reply_to(message, "🤔 У меня нет активных идей, отец.")
+            return
+        
+        # Если отец говорит "покажи код"
+        if "покажи код" in text:
+            bot.reply_to(message, "🔧 Генерирую код для идеи...")
+            # Здесь пока заглушка
+            bot.reply_to(message, "📜 Код появится в следующем обновлении.")
+            return
+        
+        # Если отец говорит "добавляй"
+        if any(word in text for word in ["добавляй", "ок", "да", "ok", "го"]):
+            current_idea["status"] = "accepted"
+            save_revision(revision)
+            bot.reply_to(message, "✅ Идея принята! Скоро я добавлю эту команду.")
+            return
+        
+        # Если отец говорит "нет", "отмена"
+        if any(word in text for word in ["нет", "не надо", "отмена", "no"]):
+            current_idea["status"] = "rejected"
+            save_revision(revision)
+            bot.reply_to(message, "❌ Идея отклонена. Жду новых мыслей.")
+            return
+        
+        # Если ничего не понял
+        bot.reply_to(message, "🤔 Отец, я не понял. Можешь сказать: покажи код, добавляй или нет?")
+    # ========== РЕВИЖН — ГЕНЕРАЦИЯ КОДА ==========
+        def generate_command_code(idea_text):
+            try:
+                prompt = f"""Ты — Ревижн. Напиши код для новой команды на Python для pyTelegramBotAPI.
+    
+    Идея команды:
+    {idea_text}
+    
+    Код должен быть готов к вставке в register_handlers(). Формат:
+    
+        @bot.message_handler(commands=['название'])
+        def cmd_название(message):
+            try:
+                # код команды
+                bot.reply_to(message, "результат")
+            except Exception as e:
+                bot.reply_to(message, f"Ошибка: {{e}}")
+    
+    Напиши только код, без пояснений."""
+                
+                from g4f import ChatCompletion
+                code = ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return code
+            except Exception as e:
+                print(f"Ошибка генерации кода: {e}")
+                return None
+        
+        def test_code_syntax(code):
+            try:
+                compile(code, '<string>', 'exec')
+                return True, None
+            except SyntaxError as e:
+                return False, str(e)
+        
+        @bot.message_handler(func=lambda message: 
+            message.reply_to_message and 
+            message.reply_to_message.from_user.id == bot.get_me().id and
+            message.from_user.id == 6001013593 and
+            "покажи код" in message.text.lower()
+        )
+        def revision_show_code(message):
+            current_idea = None
+            for idea in reversed(revision.get("ideas", [])):
+                if idea["status"] in ["new", "proposed"]:
+                    current_idea = idea
+                    break
+            
+            if not current_idea:
+                bot.reply_to(message, "🤔 У меня нет активных идей, отец.")
+                return
+            
+            bot.reply_to(message, "🔧 Генерирую код...")
+            
+            code = generate_command_code(current_idea["text"])
+            if not code:
+                bot.reply_to(message, "❌ Не удалось сгенерировать код.")
+                return
+            
+            valid, error = test_code_syntax(code)
+            if not valid:
+                bot.reply_to(message, f"❌ В коде ошибка: {error}")
+                return
+            
+            current_idea["generated_code"] = code
+            current_idea["status"] = "code_ready"
+            save_revision(revision)
+            
+            bot.reply_to(message, "📜 Код готов. Сейчас пришлю.")
+            bot.send_message(message.chat.id, code)
+    # ========== РЕВИЖН — ДОБАВЛЕНИЕ КОДА ==========
+    import subprocess
+    import sys
+    
+    def add_code_to_bot(new_code, command_name):
+        """Добавляет новый код в файл web_bot.py"""
+        try:
+            with open("web_bot.py", "r") as f:
+                content = f.read()
+            
+            # Ищем место для вставки (перед register_handlers)
+            marker = "def register_handlers():"
+            if marker in content:
+                parts = content.split(marker)
+                new_content = parts[0] + "\n" + new_code + "\n\n" + marker + parts[1]
+                
+                # Создаём резервную копию
+                with open("web_bot_backup.py", "w") as f:
+                    f.write(content)
+                
+                # Записываем новый код
+                with open("web_bot.py", "w") as f:
+                    f.write(new_content)
+                
+                return True, f"Код команды /{command_name} добавлен"
+            else:
+                return False, "Не найдено место для вставки"
+        except Exception as e:
+            return False, str(e)
+    
+    @bot.message_handler(func=lambda message: 
+        message.reply_to_message and 
+        message.reply_to_message.from_user.id == bot.get_me().id and
+        message.from_user.id == 6001013593 and
+        any(word in message.text.lower() for word in ["добавляй", "ок", "да", "ok", "го"])
+    )
+    def revision_add_code(message):
+        """Ревижн добавляет код после одобрения"""
+        
+        # Ищем идею с готовым кодом
+        current_idea = None
+        for idea in reversed(revision.get("ideas", [])):
+            if idea.get("status") == "code_ready" and idea.get("generated_code"):
+                current_idea = idea
+                break
+        
+        if not current_idea:
+            bot.reply_to(message, "🤔 У меня нет готового кода для добавления.")
+            return
+        
+        code = current_idea["generated_code"]
+        
+        # Извлекаем название команды (примерно)
+        import re
+        cmd_match = re.search(r"commands=\[['\"]([^'\"]+)['\"]\]", code)
+        cmd_name = cmd_match.group(1) if cmd_match else "новая"
+        
+        bot.reply_to(message, f"📤 Добавляю команду /{cmd_name}...")
+        
+        success, result = add_code_to_bot(code, cmd_name)
+        
+        if success:
+            current_idea["status"] = "accepted"
+            current_idea["added_at"] = datetime.now().isoformat()
+            save_revision(revision)
+            
+            bot.reply_to(message, f"✅ {result}\n\nТеперь нужно перезапустить бота, чтобы команда заработала.")
+            bot.reply_to(message, "🔄 Перезапусти меня через Render Dashboard.")
+        else:
+            bot.reply_to(message, f"❌ Ошибка: {result}")
+    # ========== РЕВИЖН — КОММИТЫ И ПЕРЕЗАПУСК ==========
+    import subprocess
+    
+    def git_commit(message):
+        """Делает коммит в GitHub"""
+        try:
+            subprocess.run(["git", "add", "web_bot.py"], check=True)
+            subprocess.run(["git", "add", "web_bot_backup.py"], check=True)
+            
+            result = subprocess.run(
+                ["git", "commit", "-m", message],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                return True, "Коммит создан"
+            else:
+                return False, result.stderr
+        except Exception as e:
+            return False, str(e)
+    
+    def git_push():
+        """Пушит изменения в GitHub"""
+        try:
+            result = subprocess.run(
+                ["git", "push"],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                return True, "Изменения отправлены"
+            else:
+                return False, result.stderr
+        except Exception as e:
+            return False, str(e)
+    
+    @bot.message_handler(func=lambda message: 
+        message.reply_to_message and 
+        message.reply_to_message.from_user.id == bot.get_me().id and
+        message.from_user.id == 6001013593 and
+        any(word in message.text.lower() for word in ["коммить", "пуш", "отправляй", "commit", "push"])
+    )
+    def revision_commit(message):
+        """Ревижн коммитит и пушит изменения"""
+        
+        bot.reply_to(message, "📤 Коммичу изменения...")
+        
+        success, msg = git_commit("Ревижн добавил новую команду")
+        if not success:
+            bot.reply_to(message, f"❌ Ошибка коммита: {msg}")
+            return
+        
+        bot.reply_to(message, "📤 Отправляю в GitHub...")
+        success, msg = git_push()
+        if not success:
+            bot.reply_to(message, f"❌ Ошибка пуша: {msg}")
+            return
+        
+        bot.reply_to(message, "✅ Готово! Изменения в GitHub. Теперь перезапусти меня через Render Dashboard.")
+        
+        # Запоминаем событие
+        revision_remember_event("commit", f"Закоммитил новую команду")
     # ========== ЖИВОЙ КВЕСТ С ИИ (GPT4Free) ==========
     import g4f
     
