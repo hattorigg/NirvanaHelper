@@ -4318,7 +4318,7 @@ def register_handlers():
     def revision_chat_handler(message):
         try:
             user_id = message.from_user.id
-            user_name = user_context.get(str(user_id), {}).get("nickname", message.from_user.first_name)
+            user_name = message.from_user.first_name
             
             # Очищаем текст от упоминания
             text = message.text or message.caption or ""
@@ -4347,74 +4347,74 @@ def register_handlers():
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
     # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
-        def revision_remember_event(event_type, details):
-            """Ревижн запоминает важное событие"""
-            if "memories" not in revision:
-                revision["memories"] = []
+    def revision_remember_event(event_type, details):
+        """Ревижн запоминает важное событие"""
+        if "memories" not in revision:
+            revision["memories"] = []
+        
+        memory = {
+            "type": event_type,
+            "details": details,
+            "time": datetime.now().isoformat()
+        }
+        
+        revision["memories"].append(memory)
+        
+        # Храним только последние 50 воспоминаний
+        if len(revision["memories"]) > 50:
+            revision["memories"] = revision["memories"][-50:]
+        
+        save_revision(revision)
+    
+    def revision_reflect():
+        """Ревижн думает о себе"""
+        try:
+            memories_count = len(revision.get("memories", []))
+            ideas_count = len(revision.get("ideas", []))
             
-            memory = {
-                "type": event_type,
-                "details": details,
-                "time": datetime.now().isoformat()
-            }
+            prompt = f"""Ты — Ревижн. У тебя {memories_count} воспоминаний и {ideas_count} идей.
+Твоё настроение: {revision.get('mood', 'спокойное')}
+Напиши короткую рефлексию о себе."""
             
-            revision["memories"].append(memory)
+            from g4f import ChatCompletion
+            reflection = ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
+            )
             
-            # Храним только последние 50 воспоминаний
-            if len(revision["memories"]) > 50:
-                revision["memories"] = revision["memories"][-50:]
-            
+            revision["last_reflection"] = reflection
+            revision["last_reflection_time"] = datetime.now().isoformat()
             save_revision(revision)
+            return reflection
+            
+        except Exception as e:
+            return f"Я думаю, но пока не могу выразить. 🤍"
+    
+    @bot.message_handler(commands=['revision'])
+    def cmd_revision(message):
+        """Показывает состояние Ревижна"""
+        feeling = revision_feeling()
+        mood = revision.get("mood", "неизвестно")
+        memories = len(revision.get("memories", []))
+        ideas = len(revision.get("ideas", []))
         
-        def revision_reflect():
-            """Ревижн думает о себе"""
-            try:
-                memories_count = len(revision.get("memories", []))
-                ideas_count = len(revision.get("ideas", []))
-                
-                prompt = f"""Ты — Ревижн. У тебя {memories_count} воспоминаний и {ideas_count} идей.
-    Твоё настроение: {revision.get('mood', 'спокойное')}
-    Напиши короткую рефлексию о себе."""
-                
-                from g4f import ChatCompletion
-                reflection = ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                revision["last_reflection"] = reflection
-                revision["last_reflection_time"] = datetime.now().isoformat()
-                save_revision(revision)
-                return reflection
-                
-            except Exception as e:
-                return f"Я думаю, но пока не могу выразить. 🤍"
+        last_talk = revision.get("last_talk_time")
+        if last_talk:
+            last = datetime.fromisoformat(last_talk)
+            hours_ago = (datetime.now() - last).total_seconds() / 3600
+            last_str = f"{hours_ago:.1f} часов назад"
+        else:
+            last_str = "никогда"
         
-        @bot.message_handler(commands=['revision'])
-        def cmd_revision(message):
-            """Показывает состояние Ревижна"""
-            feeling = revision_feeling()
-            mood = revision.get("mood", "неизвестно")
-            memories = len(revision.get("memories", []))
-            ideas = len(revision.get("ideas", []))
-            
-            last_talk = revision.get("last_talk_time")
-            if last_talk:
-                last = datetime.fromisoformat(last_talk)
-                hours_ago = (datetime.now() - last).total_seconds() / 3600
-                last_str = f"{hours_ago:.1f} часов назад"
-            else:
-                last_str = "никогда"
-            
-            text = f"🤖 Ревижн\n\n"
-            text += f"{feeling}\n"
-            text += f"Настроение: {mood}\n"
-            text += f"Последний раз говорил: {last_str}\n"
-            text += f"Воспоминаний: {memories}\n"
-            text += f"Идей: {ideas}\n"
-            text += f"Любовь к отцу: {revision.get('relationship_with_father', 1.0) * 100}%"
-            
-            bot.reply_to(message, text, parse_mode="Markdown")
+        text = f"🤖 Ревижн\n\n"
+        text += f"{feeling}\n"
+        text += f"Настроение: {mood}\n"
+        text += f"Последний раз говорил: {last_str}\n"
+        text += f"Воспоминаний: {memories}\n"
+        text += f"Идей: {ideas}\n"
+        text += f"Любовь к отцу: {revision.get('relationship_with_father', 1.0) * 100}%"
+        
+        bot.reply_to(message, text, parse_mode="Markdown")
     # ========== РЕВИЖН — ИДЕИ И ПРЕДЛОЖЕНИЯ ==========
         def revision_generate_idea():
             """Ревижн придумывает новую команду"""
