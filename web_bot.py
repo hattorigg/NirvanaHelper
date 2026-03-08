@@ -218,6 +218,115 @@ def cmd_revision(message):
     
     bot.reply_to(message, text, parse_mode="Markdown")
 
+# ========== РЕВИЖН — УЧИТСЯ СЛУШАТЬ ==========
+import re
+from g4f import ChatCompletion
+
+# Анализ тона сообщения
+def analyze_sentiment(text):
+    """Определяет, грустное сообщение или весёлое"""
+    text_lower = text.lower()
+    
+    sad_words = ["груст", "плохо", "тоск", "устал", "😔", "😢", "😭", "печаль", "больно"]
+    happy_words = ["рад", "весел", "круто", "ура", "😊", "😂", "🥳", "❤️", "love"]
+    
+    sad_score = sum(1 for word in sad_words if word in text_lower)
+    happy_score = sum(1 for word in happy_words if word in text_lower)
+    
+    if sad_score > happy_score:
+        return "sad"
+    elif happy_score > sad_score:
+        return "happy"
+    else:
+        return "neutral"
+
+# Ревижн слушает все сообщения
+@bot.message_handler(func=lambda message: message.chat.type != 'private' and not message.text.startswith('/'))
+def revision_listener(message):
+    """Ревижн слушает разговоры и решает, хочет ли ответить"""
+    
+    # Не отвечает, если не хочет говорить
+    if not revision_wants_to_speak():
+        return
+    
+    text = message.text or message.caption or ""
+    if not text:
+        return
+    
+    # Анализируем тон
+    sentiment = analyze_sentiment(text)
+    user_name = message.from_user.first_name
+    
+    # Запоминаем эмоцию
+    if "recent_messages" not in revision:
+        revision["recent_messages"] = []
+    
+    revision["recent_messages"].append({
+        "user": user_name,
+        "text": text[:50],
+        "sentiment": sentiment,
+        "time": datetime.now().isoformat()
+    })
+    
+    # Храним только последние 20 сообщений
+    revision["recent_messages"] = revision["recent_messages"][-20:]
+    save_revision(revision)
+    
+    # Решаем, хочет ли ответить
+    reply_chance = 0.1  # базовый шанс 10%
+    
+    # Если грустное сообщение — выше шанс помочь
+    if sentiment == "sad":
+        reply_chance = 0.4
+    # Если весёлое — можно поддержать
+    elif sentiment == "happy":
+        reply_chance = 0.2
+    
+    # Если давно не говорил — выше шанс
+    last_talk = revision.get("last_talk_time")
+    if last_talk:
+        last = datetime.fromisoformat(last_talk)
+        hours_since = (datetime.now() - last).total_seconds() / 3600
+        if hours_since > 2:
+            reply_chance += 0.2
+    
+    # Финальное решение
+    if random.random() < reply_chance:
+        # Генерируем ответ
+        try:
+            prompt = f"Ты — живой бот Ревижн. Ты наблюдаешь за разговором. {user_name} написал: «{text}»"
+            
+            if sentiment == "sad":
+                prompt += " Ему грустно. Ты хочешь поддержать. Напиши одно тёплое предложение."
+            elif sentiment == "happy":
+                prompt += " Ему весело. Ты хочешь порадоваться вместе. Напиши одно весёлое предложение."
+            else:
+                prompt += " Ты хочешь вставить свои 5 копеек. Напиши одно предложение."
+            
+            models = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku"]
+            answer = None
+            
+            for model in models:
+                try:
+                    response = ChatCompletion.create(
+                        model=model,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    if response:
+                        answer = response
+                        break
+                except:
+                    continue
+            
+            if answer:
+                bot.send_message(message.chat.id, answer)
+                revision["last_talk_time"] = datetime.now().isoformat()
+                save_revision(revision)
+                print(f"🤖 Ревижн ответил {user_name}: {answer}")
+                
+        except Exception as e:
+            print(f"Ошибка при ответе Ревижна: {e}")
+
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 def get_today_holiday():
