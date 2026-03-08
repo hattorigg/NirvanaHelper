@@ -761,7 +761,33 @@ def revision_commit_listener(message):
         return
 
 # Добавляем вызов revision_commit_listener в существующий обработчик
-# Нужно модифицировать revision_listen_to_father, но пока оставим отдельно        
+# Нужно модифицировать revision_listen_to_father, но пока оставим отдельно    
+
+# ========== РЕВИЖН — ОТВЕЧАЕТ НА УПОМИНАНИЯ ==========
+@bot.message_handler(func=lambda message: f"@{bot.get_me().username}" in (message.text or ""))
+def revision_mention_handler(message):
+    """Ревижн отвечает, когда его упоминают"""
+    
+    user_id = message.from_user.id
+    user_name = get_user_name(user_id, message.from_user)
+    
+    # Убираем упоминание бота из текста
+    text = message.text.replace(f"@{bot.get_me().username}", "").strip()
+    if not text:
+        text = "привет"
+    
+    # Показываем, что думает
+    thinking = bot.reply_to(message, "🤔 Думаю...")
+    
+    # Получаем ответ от ИИ
+    answer = chat_with_ai(user_id, text, user_name)
+    
+    # Отправляем ответ
+    bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
+    
+    # Обновляем время последнего разговора
+    revision["last_talk_time"] = datetime.now().isoformat()
+    save_revision(revision)
 
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
