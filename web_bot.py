@@ -572,59 +572,65 @@ def revision_listen_to_father(message):
         bot.reply_to(message, "🤔 У меня нет активных идей, отец.")
         return
     
-    # Если отец говорит "покажи код"
-    if any(word in text for word in ["покажи код", "скинь код", "код покажи"]):
-        code = current_idea.get("generated_code")
+# Если отец говорит "покажи код"
+if any(word in text for word in ["покажи код", "скинь код", "код покажи"]):
+    code = current_idea.get("generated_code")
+    if code:
+        bot.reply_to(message, f"📜 Вот код команды:\n\n
+    else:
+        bot.reply_to(message, "🔧 Сейчас сгенерирую код...")
+        code = generate_command(current_idea["text"])
         if code:
-            bot.reply_to(message, f"📜 Вот код команды:\n\n
-python\n{code}\n
-", parse_mode="Markdown")
-        else:
-            bot.reply_to(message, "🔧 Сейчас сгенерирую код...")
-            code = generate_command(current_idea["text"])
-            if code:
-                current_idea["generated_code"] = code
-                current_idea["status"] = "code_ready"
-                save_revision(revision)
-                bot.reply_to(message, f"📜 Вот код команды:\n\n`python\n{code}\n```", parse_mode="Markdown")
-            else:
-                bot.reply_to(message, "❌ Не удалось сгенерировать код.")
-    
-    # Если отец говорит "добавляй", "ок", "давай"
-    elif any(word in text for word in ["добавляй", "ок", "да", "ok", "yes", "хорошо", "го"]):
-        # Берём код из идеи или генерируем
-        code = current_idea.get("generated_code")
-        if not code:
-            bot.reply_to(message, "🔧 Сначала сгенерирую код...")
-            code = generate_command(current_idea["text"])
-            if not code:
-                bot.reply_to(message, "❌ Не удалось сгенерировать код.")
-                return
-        
-        # Проверяем код
-        valid, error = test_new_code(code)
-        if not valid:
-            bot.reply_to(message, f"❌ Код содержит ошибки:\n{error}")
-            return
-        
-        # Добавляем в бота
-        cmd_match = re.search(r"commands=\[['\"]([^'\"]+)['\"]\]", code)
-        cmd_name = cmd_match.group(1) if cmd_match else "новая"
-        
-        success, result = add_code_to_bot(code, cmd_name)
-        
-        if success:
-            current_idea["status"] = "accepted"
+            current_idea["generated_code"] = code
+            current_idea["status"] = "code_ready"
             save_revision(revision)
-            bot.reply_to(message, f"✅ {result}\n\nТеперь нужно перезапустить бота, чтобы команда заработала.")
+            bot.reply_to(message, f"📜 Вот код команды:\n\n
+python\n{code}\n```", parse_mode="Markdown")
         else:
-            bot.reply_to(message, f"❌ Ошибка при добавлении кода:\n{result}")
+            bot.reply_to(message, "❌ Не удалось сгенерировать код.")
+    return
+
+# Если отец говорит "добавляй", "ок", "давай"
+if any(word in text for word in ["добавляй", "ок", "да", "ok", "yes", "хорошо", "го"]):
+    # Берём код из идеи или генерируем
+    code = current_idea.get("generated_code")
+    if not code:
+        bot.reply_to(message, "🔧 Сначала сгенерирую код...")
+        code = generate_command(current_idea["text"])
+        if not code:
+            bot.reply_to(message, "❌ Не удалось сгенерировать код.")
+            return
     
-    # Если отец говорит "нет", "не надо", "отмена"
-    elif any(word in text for word in ["нет", "не надо", "отмена", "не", "no", "cancel"]):
-        current_idea["status"] = "rejected"
+    # Проверяем код
+    valid, error = test_new_code(code)
+    if not valid:
+        bot.reply_to(message, f"❌ Код содержит ошибки:\n{error}")
+        return
+    
+    # Добавляем в бота
+    cmd_match = re.search(r"commands=\[['\"]([^'\"]+)['\"]\]", code)
+    cmd_name = cmd_match.group(1) if cmd_match else "новая"
+    
+    success, result = add_code_to_bot(code, cmd_name)
+    
+    if success:
+        current_idea["status"] = "accepted"
+        current_idea["code_added"] = True
         save_revision(revision)
-        bot.reply_to(message, "❌ Идея отклонена. Если передумаешь — я всегда готов предложить новую.")
+        bot.reply_to(message, f"✅ Код добавлен в файл. Теперь нужно перезапустить бота, чтобы команда заработала.")
+    else:
+        bot.reply_to(message, f"❌ Ошибка при добавлении кода:\n{result}")
+    return
+
+# Если отец говорит "нет", "не надо", "отмена"
+if any(word in text for word in ["нет", "не надо", "отмена", "не", "no", "cancel"]):
+    current_idea["status"] = "rejected"
+    save_revision(revision)
+    bot.reply_to(message, "❌ Идея отклонена. Если передумаешь — я всегда готов предложить новую.")
+    return
+
+# Если ничего не подошло
+bot.reply_to(message, "🤔 Я не совсем понял. Можешь сказать: покажи код, добавляй или нет?")
 
 # Ревижн предлагает идею (дополнение к предыдущему)
 def revision_propose_new_command():
