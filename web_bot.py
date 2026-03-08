@@ -27,6 +27,8 @@ CHAT_ID = -1002281961669
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
+def register_handlers():
+
 # ========== РЕВИЖН — ЕГО СУТЬ ==========
 REVISION_PERSONALITY_FILE = "revision_personality.json"
 
@@ -2890,8 +2892,7 @@ HISTORICAL_FACTS = [
     "📜 В Латвии самый красивый пляж.",
     "📜 В Эстонии самый быстрый интернет.",
 ]
-# ========== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ ==========
-def register_handlers():
+
     import os
 
         # ========== RP КОМАНДЫ (МЕГАБЛОК) ==========
