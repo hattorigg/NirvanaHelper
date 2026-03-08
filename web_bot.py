@@ -4281,14 +4281,32 @@ def register_handlers():
     
     def ask_gpt(prompt, context=""):
         try:
-            response = g4f.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."},
-                    {"role": "user", "content": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"}
-                ]
-            )
-            return response
+            from g4f import Model, ChatCompletion
+            
+            models_to_try = [
+                "gpt-4",
+                "gpt-3.5-turbo",
+                "gpt-4-turbo",
+                "claude-3-haiku",
+                "gemini-pro"
+            ]
+            
+            for model in models_to_try:
+                try:
+                    response = ChatCompletion.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."},
+                            {"role": "user", "content": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"}
+                        ]
+                    )
+                    if response:
+                        return response
+                except:
+                    continue
+            
+            return "❌ Не удалось получить ответ ни от одной модели. Попробуй позже."
+            
         except Exception as e:
             return f"❌ Ошибка: {e}"
     
