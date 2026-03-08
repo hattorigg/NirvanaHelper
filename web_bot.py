@@ -4230,13 +4230,11 @@ def register_handlers():
             bot.reply_to(message, f"❌ Критическая ошибка: {e}")
             print(f"Ошибка в /holidays: {e}")
     # ========== КОНЕЦ /holidays ==========
-    # ========== ЖИВОЙ КВЕСТ С ИИ ==========
+    # ========== ЖИВОЙ КВЕСТ С ИИ (GPT4Free) ==========
+    import g4f
+    
     STORY_FILE = "story_states.json"
     GROUP_STORY_FILE = "group_story.json"
-    YANDEX_API_KEY = os.environ.get('YANDEX_API_KEY', '')
-    
-    if not YANDEX_API_KEY:
-        print("⚠️ ВНИМАНИЕ: YANDEX_API_KEY не задан! Квесты не будут работать.")
     
     def load_stories():
         if os.path.exists(STORY_FILE):
@@ -4281,58 +4279,16 @@ def register_handlers():
     
     user_stories = load_stories()
     
-    def ask_yandex_gpt(prompt, context=""):
-        if not YANDEX_API_KEY:
-            return "❌ API-ключ не настроен. Обратись к создателю."
-    
+    def ask_gpt(prompt, context=""):
         try:
-            # Получаем IAM-токен по API-ключу
-            iam_url = "https://iam.api.cloud.yandex.net/iam/v1/tokens"
-            iam_data = {
-                "yandexPassportOauthToken": YANDEX_API_KEY  # если API-ключ — это OAuth
-            }
-            iam_response = requests.post(iam_url, json=iam_data, timeout=10)
-            
-            if iam_response.status_code != 200:
-                return f"❌ Не удалось получить IAM-токен: {iam_response.text}"
-            
-            iam_token = iam_response.json().get('iamToken')
-            if not iam_token:
-                return "❌ Не удалось получить IAM-токен"
-    
-            # Теперь отправляем запрос к YandexGPT
-            url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
-            headers = {
-                "Authorization": f"Bearer {iam_token}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "modelUri": "gpt://yandexgpt-lite",
-                "completionOptions": {
-                    "stream": False,
-                    "temperature": 0.6,
-                    "maxTokens": "200"
-                },
-                "messages": [
-                    {
-                        "role": "system",
-                        "text": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."
-                    },
-                    {
-                        "role": "user",
-                        "text": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"
-                    }
+            response = g4f.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."},
+                    {"role": "user", "content": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"}
                 ]
-            }
-            
-            response = requests.post(url, headers=headers, json=data, timeout=15)
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result['result']['message']['text']
-            else:
-                return f"❌ Ошибка API: {response.status_code} — {response.text}"
-                
+            )
+            return response
         except Exception as e:
             return f"❌ Ошибка: {e}"
     
@@ -4342,8 +4298,7 @@ def register_handlers():
         text = message.text.replace('/quest', '', 1).strip().lower()
     
         if text == 'начать' or text == 'start':
-            start_prompt = "Начни новую историю. Игрок просыпается в загадочном месте. Опиши обстановку одним-двумя предложениями."
-            response = ask_yandex_gpt(start_prompt, "")
+            response = ask_gpt("Начни новую историю. Игрок просыпается в загадочном месте. Опиши обстановку.")
             user_stories[user_id] = response
             save_stories(user_stories)
             bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}")
@@ -4353,13 +4308,13 @@ def register_handlers():
             if user_id in user_stories:
                 del user_stories[user_id]
                 save_stories(user_stories)
-                bot.reply_to(message, "✅ Твоя история сброшена. Можешь начать новую командой /quest начать")
+                bot.reply_to(message, "✅ Твоя история сброшена.")
             else:
                 bot.reply_to(message, "❌ У тебя нет активной истории.")
             return
     
         if not text:
-            bot.reply_to(message, "❌ Используй:\n/quest начать — начать новую историю\n/quest действие — продолжить\n/quest сброс — сбросить")
+            bot.reply_to(message, "❌ Используй:\n/quest начать — начать\n/quest действие — продолжить\n/quest сброс — сбросить")
             return
     
         if user_id not in user_stories:
@@ -4367,7 +4322,7 @@ def register_handlers():
             return
     
         context = user_stories[user_id]
-        response = ask_yandex_gpt(text, context)
+        response = ask_gpt(text, context)
         user_stories[user_id] = context + "\n" + text + "\n" + response
         save_stories(user_stories)
         bot.reply_to(message, f"📖 ...\n\n{response}")
@@ -4378,10 +4333,9 @@ def register_handlers():
         text = message.text.replace('/groupquest', '', 1).strip().lower()
     
         if text == 'начать' or text == 'start':
-            start_prompt = "Начни новую групповую историю. Несколько героев собираются вместе. Опиши место и ситуацию."
-            response = ask_yandex_gpt(start_prompt, "")
+            response = ask_gpt("Начни новую групповую историю. Несколько героев собираются вместе. Опиши место.")
             save_group_story(chat_id, response)
-            bot.reply_to(message, f"🌍 Общая история для всех начинается...\n\n{response}")
+            bot.reply_to(message, f"🌍 Общая история начинается...\n\n{response}")
             return
     
         if text == 'сброс' or text == 'reset':
@@ -4390,7 +4344,7 @@ def register_handlers():
             return
     
         if not text:
-            bot.reply_to(message, "❌ Используй:\n/groupquest начать — начать общую историю\n/groupquest действие — продолжить\n/groupquest сброс — сбросить")
+            bot.reply_to(message, "❌ Используй: /groupquest начать / действие / сброс")
             return
     
         context = load_group_story(chat_id)
@@ -4398,10 +4352,10 @@ def register_handlers():
             bot.reply_to(message, "❌ Сначала начни общую историю: /groupquest начать")
             return
     
-        response = ask_yandex_gpt(text, context)
+        response = ask_gpt(text, context)
         new_context = context + "\n" + text + "\n" + response
         save_group_story(chat_id, new_context)
-        bot.reply_to(message, f"📜 ...\n\n{response}")
+        bot.reply_to(message, f"📜 ...\n\n{response}")    
     # ========== АНТИССЫЛКА ДЛЯ КАЖДОГО ЧАТА ==========
     import json
     import os
