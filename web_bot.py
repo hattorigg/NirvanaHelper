@@ -4287,12 +4287,13 @@ def register_handlers():
     
         # Список моделей для перебора
         models = [
-            "gpt://yandexgpt-lite",
-            "gpt://yandexgpt/latest",
-            "yandexgpt-lite",
-            "yandexgpt",
-            "gpt://yandexgpt"
-        ]
+    "gpt://yandexgpt/latest",
+    "gpt://yandexgpt-lite/latest",
+    "gpt://yandexgpt",
+    "gpt://yandexgpt-lite",
+    "yandexgpt/latest",
+    "yandexgpt-lite/latest"
+]
     
         last_error = ""
         
