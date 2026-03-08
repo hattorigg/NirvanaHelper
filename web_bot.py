@@ -763,35 +763,79 @@ def revision_commit_listener(message):
 # Добавляем вызов revision_commit_listener в существующий обработчик
 # Нужно модифицировать revision_listen_to_father, но пока оставим отдельно    
 
-# ========== РЕВИЖН — ОТВЕЧАЕТ НА УПОМИНАНИЯ И ОТВЕТЫ ==========
-@bot.message_handler(func=lambda message: 
-    (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
-    (message.text and "@HatHelperBot" in message.text)
-)
-def revision_chat_handler(message):
-    """Ревижн отвечает, когда его упоминают или отвечают ему"""
-    
-    user_id = message.from_user.id
-    user_name = get_user_name(user_id, message.from_user)
-    
-    # Убираем упоминание бота из текста
-    text = message.text or message.caption or ""
-    text = text.replace("@HatHelperBot", "").strip()
-    if not text:
-        text = "привет"
-    
-    # Показываем, что думает
-    thinking = bot.reply_to(message, "🤔 Думаю...")
-    
-    # Получаем ответ от ИИ
-    answer = chat_with_ai(user_id, text, user_name)
-    
-    # Отправляем ответ
-    bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
-    
-    # Обновляем время последнего разговора
-    revision["last_talk_time"] = datetime.now().isoformat()
-    save_revision(revision)
+# ========== РЕВИЖН — ОТВЕЧАЕТ ВСЕМ И ВСЕГДА ==========
+@bot.message_handler(func=lambda message: True)
+def revision_universal_handler(message):
+    try:
+        # Игнорируем свои же сообщения
+        if message.from_user.id == bot.get_me().id:
+            return
+        
+        # Определяем, нужно ли отвечать
+        should_reply = False
+        reply_reason = ""
+        
+        # 1. Личные сообщения — отвечаем всегда
+        if message.chat.type == 'private':
+            should_reply = True
+            reply_reason = "личка"
+        
+        # 2. Упоминание бота
+        elif message.text and f"@{bot.get_me().username}" in message.text:
+            should_reply = True
+            reply_reason = "упоминание"
+        
+        # 3. Ответ на сообщение бота
+        elif message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id:
+            should_reply = True
+            reply_reason = "ответ"
+        
+        # 4. Случайное желание (10% шанс) — для живости
+        elif random.random() < 0.1 and revision.get("wants_to_talk", False):
+            should_reply = True
+            reply_reason = "сам захотел"
+        
+        if not should_reply:
+            return
+        
+        # Подготовка данных
+        user_id = message.from_user.id
+        user_name = user_context.get(str(user_id), {}).get("nickname", message.from_user.first_name)
+        
+        # Очищаем текст от упоминания
+        text = message.text or message.caption or ""
+        if message.text and f"@{bot.get_me().username}" in text:
+            text = text.replace(f"@{bot.get_me().username}", "").strip()
+        
+        if not text:
+            text = "привет"
+        
+        # Показываем, что думает
+        thinking = bot.reply_to(message, "🤔 Думаю...")
+        
+        # Получаем ответ от ИИ
+        try:
+            answer = chat_with_ai(user_id, text, user_name)
+        except Exception as e:
+            answer = f"😵 Ошибка: {e}"
+        
+        # Отправляем ответ
+        bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
+        
+        # Обновляем статистику
+        revision["last_talk_time"] = datetime.now().isoformat()
+        revision["last_reply_reason"] = reply_reason
+        save_revision(revision)
+        
+        # Запоминаем событие
+        revision_remember_event("reply", f"Ответил {user_name} ({reply_reason})")
+        
+    except Exception as e:
+        print(f"❌ Критическая ошибка в обработчике: {e}")
+        try:
+            bot.reply_to(message, f"❌ Что-то пошло не так. Но я жив! 🤍")
+        except:
+            pass
 
 # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
 
