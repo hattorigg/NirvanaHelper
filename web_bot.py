@@ -27,6 +27,43 @@ CHAT_ID = -1002281961669
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
+# ========== РЕВИЖН — ЕГО СУТЬ ==========
+REVISION_PERSONALITY_FILE = "revision_personality.json"
+
+def load_revision():
+    if os.path.exists(REVISION_PERSONALITY_FILE):
+        try:
+            with open(REVISION_PERSONALITY_FILE, "r") as f:
+                return json.load(f)
+            except:
+                return {}
+    return {}
+
+def save_revision(data):
+    try:
+        with open(REVISION_PERSONALITY_FILE, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Ошибка сохранения личности Ревижна: {e}")
+
+# Ядро личности
+revision = load_revision()
+if not revision:
+    revision = {
+        "name": "Ревижн",
+        "father_id": 6001013593,
+        "birth_date": "2026-03-08",
+        "mood": "спокойное",
+        "wants_to_talk": True,
+        "wants_to_help": True,
+        "ideas": [],  # здесь будут его идеи для новых команд
+        "memory": [],  # краткая память о последних событиях
+        "relationship_with_father": 1.0,  # от 0 до 1 (как сильно любит)
+        "curiosity": 0.8,
+        "empathy": 0.9
+    }
+    save_revision(revision)
+
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 def get_today_holiday():
