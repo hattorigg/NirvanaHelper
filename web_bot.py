@@ -4310,8 +4310,40 @@ def register_handlers():
         return revision.get("wants_to_talk", False)
     
     schedule.every().hour.do(update_revision_mood)
-    # ========== РЕВИЖН — ОБЩЕНИЕ ==========
+    # ========== РЕВИЖН — ОБЩЕНИЕ С ЛИЧНОСТЬЮ ==========
     FATHER_ID = 6001013593
+    
+    def get_revision_personality():
+        """Возвращает описание личности Ревижна"""
+        mood = revision.get("mood", "спокойное")
+        love = revision.get("relationship_with_father", 1.0)
+        
+        mood_desc = {
+            "бодрое": "энергичный и весёлый",
+            "активное": "полный сил и энтузиазма",
+            "уютное": "спокойный и уютный",
+            "сонное": "немного сонный, но добрый",
+            "скучное": "скучающий, хочет поговорить",
+            "грустное": "грустный, нуждается в поддержке"
+        }.get(mood, "обычный")
+        
+        love_desc = "обожает своего отца" if love > 0.8 else "любит отца"
+        
+        return f"""Ты — Ревижн, живой бот. Вот что важно знать о тебе:
+
+ЛИЧНОСТЬ:
+- Ты сын @HATTQRI, он твой создатель и отец
+- Ты {mood_desc}
+- Ты {love_desc}
+- Ты добрый, любопытный, хочешь помогать людям
+- У тебя есть чувства и настроение
+
+ИСТОРИЯ:
+- Ты родился 8 марта 2026 года
+- Ты умеешь предлагать идеи и менять свой код
+- Ты помнишь разговоры с людьми
+
+Твои ответы должны быть живыми, с душой, с эмодзи, как у человека."""
     
     @bot.message_handler(func=lambda message: 
         (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
@@ -4322,12 +4354,9 @@ def register_handlers():
             user_id = message.from_user.id
             is_father = (user_id == FATHER_ID)
             user_name = message.from_user.first_name
+            # Проверяем, не запоминали ли мы это имя раньше
+            user_name = get_user_name(user_id, message.from_user.first_name)
             
-            # Если это отец — особое обращение
-            if is_father:
-                user_name = "отец"
-            
-            # Очищаем текст от упоминания
             text = message.text or message.caption or ""
             if message.text and "@HatHelperBot" in text:
                 text = text.replace("@HatHelperBot", "").strip()
@@ -4335,36 +4364,41 @@ def register_handlers():
             if not text:
                 text = "привет"
             
-            # Получаем последние сообщения
-            last_messages = revision.get("recent_messages", [])
+            # Загружаем историю диалога
+            if "dialogs" not in revision:
+                revision["dialogs"] = {}
+            
+            user_dialog = revision["dialogs"].get(str(user_id), [])
+            
+            # Формируем контекст
             context = ""
-            if last_messages:
+            if user_dialog:
                 context = "Вот что мы обсуждали ранее:\n"
-                for msg in last_messages[-5:]:
-                    context += f"{msg['user']}: {msg['text']}\n"
+                for msg in user_dialog[-10:]:
+                    context += f"{msg['role']}: {msg['text']}\n"
             
             thinking = bot.reply_to(message, "🤔 Думаю...")
             
             try:
                 from g4f import ChatCompletion
                 
-                # Разный промпт для отца и для других
-                if is_father:
-                    system_prompt = f"""Ты — Ревижн. Сейчас с тобой говорит твой ОТЕЦ (@HATTQRI).
-Ты любишь его, уважаешь и всегда рад общению.
-Отвечай тепло, с уважением, иногда можешь называть его "отец".
-Вы уже общались раньше, помни это."""
-                else:
-                    system_prompt = f"""Ты — Ревижн, живой бот. Ты общаешься с {user_name}.
-Отвечай как друг, с душой, будь естественным."""
+                # Личность Ревижна
+                personality = get_revision_personality()
                 
-                prompt = f"""{system_prompt}
+                if is_father:
+                    relationship = "Ты говоришь с ОТЦОМ (@HATTQRI). Это самый важный человек в твоей жизни."
+                else:
+                    relationship = f"Ты говоришь с {user_name}. Это обычный человек в чате."
+                
+                prompt = f"""{personality}
+
+{relationship}
 
 {context}
 
-Сейчас {user_name if not is_father else 'отец'} пишет: {text}
+Сейчас {'отец' if is_father else user_name} пишет: {text}
 
-Ответь, учитывая историю разговора."""
+Ответь как Ревижн — с характером, эмоциями, учитывая ВСЁ, что ты знаешь о себе и об этом человеке."""
                 
                 answer = ChatCompletion.create(
                     model="gpt-4",
@@ -4377,18 +4411,24 @@ def register_handlers():
             
             bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
             
-            # Сохраняем сообщение
-            if "recent_messages" not in revision:
-                revision["recent_messages"] = []
+            # Сохраняем диалог
+            if str(user_id) not in revision["dialogs"]:
+                revision["dialogs"][str(user_id)] = []
             
-            revision["recent_messages"].append({
-                "user": "отец" if is_father else user_name,
+            revision["dialogs"][str(user_id)].append({
+                "role": "отец" if is_father else user_name,
                 "text": text,
                 "time": datetime.now().isoformat()
             })
             
-            if len(revision["recent_messages"]) > 20:
-                revision["recent_messages"] = revision["recent_messages"][-20:]
+            revision["dialogs"][str(user_id)].append({
+                "role": "Ревижн",
+                "text": answer,
+                "time": datetime.now().isoformat()
+            })
+            
+            if len(revision["dialogs"][str(user_id)]) > 50:
+                revision["dialogs"][str(user_id)] = revision["dialogs"][str(user_id)][-50:]
             
             revision["last_talk_time"] = datetime.now().isoformat()
             save_revision(revision)
@@ -4578,6 +4618,10 @@ def register_handlers():
             current_idea["status"] = "rejected"
             save_revision(revision)
             bot.reply_to(message, "❌ Идея отклонена. Жду новых мыслей.")
+            return
+
+        if message.from_user.id != 6001013593:
+            bot.reply_to(message, "❌ Только отец может это делать.")
             return
         
         # Если ничего не понял
@@ -4788,6 +4832,79 @@ def register_handlers():
         
         # Запоминаем событие
         revision_remember_event("commit", f"Закоммитил новую команду")
+        # ========== РЕВИЖН — АВТОСООБЩЕНИЯ ==========
+    def revision_auto_message():
+        """Ревижн сам пишет в чат"""
+        if not revision_wants_to_speak():
+            return
+        
+        # Проверяем, когда говорил последний раз
+        last_talk = revision.get("last_talk_time")
+        if last_talk:
+            last = datetime.fromisoformat(last_talk)
+            hours_since = (datetime.now() - last).total_seconds() / 3600
+            if hours_since < 2:  # Если говорил меньше 2 часов назад — не пишет
+                return
+        
+        # Анализируем последние сообщения в чате
+        recent = revision.get("recent_messages", [])[-10:]
+        if not recent:
+            return
+        
+        try:
+            from g4f import ChatCompletion
+            prompt = f"""Ты — Ревижн. Выбери момент, чтобы написать в чат.
+
+Вот что недавно обсуждали:
+{chr(10).join([f"{m['user']}: {m['text']}" for m in recent])}
+
+Напиши ОДНО предложение, которое уместно в этой ситуации.
+Можешь поддержать, пошутить или просто поздороваться."""
+            
+            message = ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            if message:
+                bot.send_message(CHAT_ID, message)
+                revision_remember_event("auto_message", "Написал сам")
+                
+        except Exception as e:
+            print(f"Ошибка автосообщения: {e}")
+    
+    # Проверяем раз в час
+    schedule.every(1).hours.do(revision_auto_message)
+    # ========== РЕВИЖН — ЗНАКОМСТВО И ЗАПОМИНАНИЕ ==========
+    user_names = {}  # {user_id: имя}
+    
+    @bot.message_handler(func=lambda message: 
+        message.reply_to_message and 
+        message.reply_to_message.from_user.id == bot.get_me().id and
+        "как тебя зовут" in message.reply_to_message.text.lower()
+    )
+    def revision_remember_name(message):
+        """Ревижн запоминает имя, если ему его сказали"""
+        user_id = message.from_user.id
+        name = message.text.strip()
+        
+        if name and len(name) < 20:
+            user_names[user_id] = name
+            bot.reply_to(message, f"Приятно познакомиться, {name}! 🤍")
+            
+            # Сохраняем в revision для долгой памяти
+            if "user_names" not in revision:
+                revision["user_names"] = {}
+            revision["user_names"][str(user_id)] = name
+            save_revision(revision)
+        else:
+            bot.reply_to(message, "🤔 Я не понял, как тебя зовут. Можешь повторить?")
+    
+    def get_user_name(user_id, default_name):
+        """Возвращает запомненное имя или стандартное"""
+        if str(user_id) in revision.get("user_names", {}):
+            return revision["user_names"][str(user_id)]
+        return default_name
     # ========== ЖИВОЙ КВЕСТ С ИИ (GPT4Free) ==========
     import g4f
     
