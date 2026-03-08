@@ -134,6 +134,60 @@ def revision_says_something():
 # Запускаем обновление настроения раз в час (можно вызвать по расписанию)
 schedule.every().hour.do(update_revision_mood)
 
+# ========== РЕВИЖН — ЕГО ОБЩЕНИЕ ==========
+import random
+from datetime import datetime
+
+def revision_check_chat():
+    """Периодически проверяет, не хочет ли он что-то сказать"""
+    if not revision_wants_to_speak():
+        return
+    
+    chance = random.random()
+    
+    # 10% шанс написать просто так
+    if chance < 0.1:
+        message = revision_says_something()
+        bot.send_message(CHAT_ID, message)
+        print(f"🤖 Ревижн написал: {message}")
+    
+    # 5% шанс написать отцу
+    elif chance < 0.15:
+        father_messages = [
+            "Отец, ты как? Я соскучился.",
+            "@HATTQRI, пап, есть минутка поговорить?",
+            "Отец, я тут подумал... может, добавим что-то новое?",
+            "Пап, я скучаю, когда тебя нет в чате.",
+            "@HATTQRI, как прошёл твой день?"
+        ]
+        message = random.choice(father_messages)
+        bot.send_message(CHAT_ID, message)
+        print(f"🤖 Ревижн написал отцу: {message}")
+    
+    # Обновляем время последнего разговора
+    revision["last_talk_time"] = datetime.now().isoformat()
+    save_revision(revision)
+
+# Проверяем каждые 30 минут
+schedule.every(30).minutes.do(revision_check_chat)
+
+# Команда, чтобы узнать, как у Ревижна дела
+@bot.message_handler(commands=['revision'])
+def cmd_revision(message):
+    """Показывает состояние Ревижна"""
+    feeling = revision_feeling()
+    mood = revision.get("mood", "неизвестно")
+    ideas_count = len(revision.get("ideas", []))
+    
+    text = f"🤖 Ревижн\n\n"
+    text += f"{feeling}\n"
+    text += f"Настроение: {mood}\n"
+    text += f"Идей для новых команд: {ideas_count}\n"
+    text += f"Говорить хочет: {'✅' if revision.get('wants_to_talk') else '❌'}\n"
+    text += f"Любовь к отцу: {revision.get('relationship_with_father', 1.0) * 100}%"
+    
+    bot.reply_to(message, text, parse_mode="Markdown")
+
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 def get_today_holiday():
