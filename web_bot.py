@@ -327,6 +327,133 @@ def revision_listener(message):
         except Exception as e:
             print(f"Ошибка при ответе Ревижна: {e}")
 
+# ========== РЕВИЖН — ГЕНЕРИРУЕТ ИДЕИ ==========
+import random
+from datetime import datetime
+
+def revision_generate_idea():
+    """Ревижн придумывает новую команду"""
+    try:
+        # Анализируем последние сообщения в чате
+        recent = revision.get("recent_messages", [])
+        recent_text = "\n".join([f"{msg['user']}: {msg['text']}" for msg in recent[-10:]])
+        
+        # Смотрим, какие команды уже есть (примерно)
+        existing_commands = ["meme", "fact", "quest", "ask", "weather", "music", "movie"]
+        
+        prompt = f"""Ты — Ревижн, живой бот, который хочет улучшить свой чат.
+
+Вот что недавно обсуждали:
+{recent_text}
+
+Вот какие команды уже есть: {', '.join(existing_commands)}
+
+Придумай одну новую команду, которая была бы полезна в этом чате.
+Опиши её в формате:
+Название: /название
+Что делает: краткое описание
+Почему это нужно: объяснение
+
+Будь креативен, но не слишком сложен."""
+        
+        models = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku"]
+        idea = None
+        
+        for model in models:
+            try:
+                response = ChatCompletion.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                if response:
+                    idea = response
+                    break
+            except:
+                continue
+        
+        if idea:
+            return idea
+        else:
+            return "Не могу придумать идею сейчас."
+            
+    except Exception as e:
+        print(f"Ошибка генерации идеи: {e}")
+        return None
+
+def revision_check_ideas():
+    """Периодически проверяет, не пора ли предложить новую команду"""
+    
+    # Если уже есть непредложенные идеи — не генерируем новую
+    if revision.get("ideas") and len(revision["ideas"]) > 0:
+        return
+    
+    # Генерируем идею
+    idea_text = revision_generate_idea()
+    if not idea_text:
+        return
+    
+    # Сохраняем идею
+    if "ideas" not in revision:
+        revision["ideas"] = []
+    
+    idea = {
+        "text": idea_text,
+        "generated_at": datetime.now().isoformat(),
+        "status": "new"  # new / proposed / accepted / rejected
+    }
+    
+    revision["ideas"].append(idea)
+    save_revision(revision)
+    
+    # Если есть отец в чате — отмечаем его
+    try:
+        message = f"🤖 @HATTQRI, отец, у меня появилась идея для новой команды!\n\n{idea_text}"
+        bot.send_message(CHAT_ID, message)
+        print(f"🤖 Ревижн предложил идею")
+    except:
+        pass
+
+def revision_propose_idea():
+    """Ревижн сам решает, когда предложить идею"""
+    
+    # Проверяем, есть ли уже идеи
+    if revision.get("ideas") and len(revision["ideas"]) > 0:
+        # Если есть непредложенная идея — предлагаем
+        for idea in revision["ideas"]:
+            if idea["status"] == "new":
+                message = f"🤖 @HATTQRI, отец, у меня есть идея!\n\n{idea['text']}"
+                bot.send_message(CHAT_ID, message)
+                idea["status"] = "proposed"
+                save_revision(revision)
+                return
+    
+    # Если нет идей — генерируем
+    revision_check_ideas()
+
+# Команда для просмотра идей
+@bot.message_handler(commands=['revision_ideas'])
+def cmd_revision_ideas(message):
+    """Показывает все идеи Ревижна"""
+    if not revision.get("ideas"):
+        bot.reply_to(message, "🤖 У меня пока нет идей.")
+        return
+    
+    text = "💡 Идеи Ревижна:\n\n"
+    for i, idea in enumerate(revision["ideas"], 1):
+        status_emoji = {
+            "new": "🆕",
+            "proposed": "📨",
+            "accepted": "✅",
+            "rejected": "❌"
+        }.get(idea["status"], "💭")
+        
+        text += f"{status_emoji} Идея {i}:\n{idea['text']}\n\n"
+    
+    bot.reply_to(message, text, parse_mode="Markdown")
+
+# Проверяем идеи раз в день
+schedule.every().day.at("10:00").do(revision_propose_idea)
+
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 def get_today_holiday():
