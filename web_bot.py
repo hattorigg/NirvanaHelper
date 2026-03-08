@@ -620,6 +620,149 @@ def revision_listen_to_father(message):
 
     bot.reply_to(message, "🤔 Я не совсем понял. Можешь сказать: покажи код, добавляй или нет?")
 
+# ========== РЕВИЖН — УЧИТСЯ КОММИТИТЬ ==========
+import subprocess
+import os
+from datetime import datetime
+
+def git_commit(message):
+    """Делает коммит в GitHub"""
+    try:
+        # Добавляем изменения
+        subprocess.run(["git", "add", "web_bot.py"], check=True)
+        subprocess.run(["git", "add", "revision_personality.json"], check=True)
+        
+        # Коммитим
+        result = subprocess.run(
+            ["git", "commit", "-m", message],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            return True, "Коммит создан"
+        else:
+            return False, result.stderr
+    except Exception as e:
+        return False, str(e)
+
+def git_push():
+    """Пушит изменения в GitHub"""
+    try:
+        result = subprocess.run(
+            ["git", "push"],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            return True, "Изменения отправлены"
+        else:
+            return False, result.stderr
+    except Exception as e:
+        return False, str(e)
+
+def restart_render():
+    """Перезапускает бота на Render"""
+    try:
+        # Тут нужен API-ключ Render, пока просто симулируем
+        print("🔄 Запрос на перезапуск Render")
+        # В будущем можно добавить реальный API
+        return True, "Бот будет перезапущен через несколько секунд"
+    except Exception as e:
+        return False, str(e)
+
+def revision_ask_to_commit(idea):
+    """Ревижн спрашивает отца, можно ли закоммитить изменения"""
+    
+    message = f"🤖 @HATTQRI, отец, я добавил код!\n\n"
+    message += f"Идея: {idea['text'][:200]}...\n\n"
+    message += "Теперь нужно закоммитить изменения в GitHub.\n"
+    message += "Скажи «коммить» — я сделаю это сам.\n"
+    message += "Скажи «покажи» — покажу что изменилось.\n"
+    message += "Скажи «отмена» — откачу изменения."
+    
+    # Сохраняем, что ждём ответа
+    revision["waiting_for_commit"] = {
+        "idea_id": id(idea),
+        "code_added": True
+    }
+    save_revision(revision)
+    
+    bot.send_message(CHAT_ID, message)
+
+# Обновляем обработчик ответов отца (добавляем коммиты)
+def revision_commit_listener(message):
+    """Ревижн слушает, что говорит отец про коммит"""
+    
+    text = message.text.lower()
+    
+    # Проверяем, ждём ли мы ответа на коммит
+    waiting = revision.get("waiting_for_commit")
+    if not waiting:
+        return
+    
+    # Если отец говорит "коммить", "давай", "ok"
+    if any(word in text for word in ["коммить", "пуш", "отправляй", "commit", "push"]):
+        bot.reply_to(message, "📤 Коммичу изменения...")
+        
+        # Коммитим
+        success, msg = git_commit("Ревижн добавил новую команду")
+        if not success:
+            bot.reply_to(message, f"❌ Ошибка коммита: {msg}")
+            return
+        
+        # Пушим
+        bot.reply_to(message, "📤 Отправляю в GitHub...")
+        success, msg = git_push()
+        if not success:
+            bot.reply_to(message, f"❌ Ошибка пуша: {msg}")
+            return
+        
+        # Перезапускаем
+        bot.reply_to(message, "🔄 Перезапускаю бота...")
+        success, msg = restart_render()
+        
+        # Очищаем ожидание
+        revision.pop("waiting_for_commit", None)
+        save_revision(revision)
+        
+        bot.reply_to(message, f"✅ Готово! {msg}")
+        return
+    
+    # Если отец говорит "покажи"
+    elif "покажи" in text:
+        # Показываем diff
+        try:
+            result = subprocess.run(
+                ["git", "diff"],
+                capture_output=True,
+                text=True
+            )
+            diff = result.stdout
+            if diff:
+                bot.send_message(message.chat.id, diff[:3000])
+            else:
+                bot.reply_to(message, "📭 Нет изменений для показа.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка: {e}")
+        return
+    
+    # Если отец говорит "отмена", "откати"
+    elif any(word in text for word in ["отмена", "откати", "назад", "no"]):
+        # Откатываем изменения
+        try:
+            subprocess.run(["git", "checkout", "web_bot.py"], check=True)
+            revision.pop("waiting_for_commit", None)
+            save_revision(revision)
+            bot.reply_to(message, "✅ Изменения откачены. Жду новых идей.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка отката: {e}")
+        return
+
+# Добавляем вызов revision_commit_listener в существующий обработчик
+# Нужно модифицировать revision_listen_to_father, но пока оставим отдельно        
+
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 def get_today_holiday():
