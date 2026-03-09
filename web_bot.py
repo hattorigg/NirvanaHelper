@@ -4889,176 +4889,49 @@ def register_handlers():
             return revision["user_names"][str(user_id)]
         return default_name
 
-    # ========== РЕВИЖН — СТАТИСТИКА ДЛЯ СОЗДАТЕЛЯ ==========
-    import json
-    import os
-    from datetime import datetime
+    # =============================================
+    # БЛОК: СТАТИСТИКА (из словаря users)
+    # =============================================
     
-    # Файл для хранения всей истории сообщений
-    ALL_MESSAGES_FILE = "all_messages.json"
-    
-    def load_all_messages():
-        if os.path.exists(ALL_MESSAGES_FILE):
-            try:
-                with open(ALL_MESSAGES_FILE, "r") as f:
-                    return json.load(f)
-            except:
-                return []
-        return []
-    
-    def save_all_messages(messages):
-        try:
-            with open(ALL_MESSAGES_FILE, "w") as f:
-                json.dump(messages, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"Ошибка сохранения лога сообщений: {e}")
-    
-    # Глобальный лог всех сообщений (если его нет)
-    all_messages = load_all_messages()
-    last_saved_id = 0
-    
-    # Трекер для записи ВСЕХ сообщений
-    @bot.message_handler(func=lambda message: True)
-    def global_message_tracker(message):
-        global last_saved_id
-        try:
-            msg_data = {
-                "id": message.message_id,
-                "chat_id": message.chat.id,
-                "chat_name": message.chat.title or f"Личка с {message.from_user.first_name}",
-                "user_id": message.from_user.id,
-                "user_name": message.from_user.first_name,
-                "text": message.text or message.caption or "",
-                "is_reply_to_bot": (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id),
-                "timestamp": datetime.now().isoformat()
-            }
-            all_messages.append(msg_data)
-            if len(all_messages) > 10000:  # Храним последние 10k сообщений
-                all_messages[:] = all_messages[-10000:]
-            # Сохраняем раз в 10 сообщений
-            if message.message_id - last_saved_id > 10:
-                save_all_messages(all_messages)
-                last_saved_id = message.message_id
-        except Exception as e:
-            print(f"Ошибка в глобальном трекере: {e}")
-    
-    @bot.message_handler(commands=['father_stats'])
-    def cmd_father_stats(message):
-        """Показывает полную статистику для создателя"""
+    async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика по пользователям из bot_data"""
         
-        if message.from_user.id != FATHER_ID:
-            return
-        if message.chat.type != 'private':
-            bot.reply_to(message, "❌ Используй в личных сообщениях.")
-            return
-    
-        status_msg = bot.reply_to(message, "🔍 Собираю статистику...")
-        save_all_messages(all_messages)  # Сохраняем перед подсчетом
-    
-        # 1. Статистика по чатам (из bot_chats)
-        chats_list = []
-        for chat_id, info in bot_chats.items():
-            chat_name = info.get('name', f"Чат {chat_id}")
-            try:
-                member = bot.get_chat_member(int(chat_id), bot.get_me().id)
-                is_admin = member.status in ['administrator', 'creator']
-                admin_status = "✅" if is_admin else "❌"
-            except:
-                admin_status = "🚫"
-            chats_list.append(f"• {chat_name}\n  ID: {chat_id} | Админ: {admin_status}")
-    
-        # 2. Статистика по пользователям, которые писали боту
-        users = {}
-        for msg in all_messages:
-            uid = str(msg["user_id"])
-            if uid not in users:
-                users[uid] = {
-                    "name": msg["user_name"],
-                    "total_msgs": 0,
-                    "revision_msgs": 0,
-                    "chats": set(),
-                    "last_seen": msg["timestamp"]
-                }
-            users[uid]["total_msgs"] += 1
-            if msg.get("is_reply_to_bot"):
-                users[uid]["revision_msgs"] += 1
-            users[uid]["chats"].add(str(msg["chat_id"]))
-            if msg["timestamp"] > users[uid]["last_seen"]:
-                users[uid]["last_seen"] = msg["timestamp"]
-    
-        # Формируем ответ
-        text = f"👑 Статистика для создателя\n\n"
+        # --- Проверка данных ---
+        if 'users' not in context.bot_data:
+            context.bot_data['users'] = {}
         
-        text += f"Всего чатов с ботом: {len(bot_chats)}\n"
-        if chats_list:
-            text += "\n".join(chats_list[:10])
-            if len(chats_list) > 10:
-                text += f"\n... и ещё {len(chats_list) - 10}"
+        users = context.bot_data['users']
+        total = len(users)
         
-        text += f"\n\nВсего пользователей писало: {len(users)}\n"
-    user_list = []
-        for uid, data in list(users.items())[:15]:
-            last = datetime.fromisoformat(data["last_seen"]).strftime("%d.%m %H:%M")
-            user_list.append(f"• {data['name']} (ID: {uid})\n  Сообщений: {data['total_msgs']} (с Ревижном: {data['revision_msgs']}) | Последнее: {last}")
-        text += "\n".join(user_list)
-        if len(users) > 15:
-            text += f"\n... и ещё {len(users) - 15}"
-    
-        bot.edit_message_text(text, chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="Markdown")
-    
-    @bot.message_handler(commands=['father_dialog'])
-    def cmd_father_dialog(message):
-        """Показывает ВСЮ переписку с конкретным пользователем"""
+        # --- Подсчёт онлайна (24 часа) ---
+        from datetime import datetime, timedelta
+        cutoff = datetime.now() - timedelta(hours=24)
+        online = sum(1 for u in users.values() 
+                     if u.get('last_seen', datetime.min) > cutoff)
         
-        if message.from_user.id != FATHER_ID:
-            return
-        if message.chat.type != 'private':
-            bot.reply_to(message, "❌ Используй в личных сообщениях.")
-            return
-    
-        args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "❌ Укажи ID пользователя:\n/father_dialog 123456789")
-            return
-    
-        try:
-            target_id = str(int(args[1]))
-        except:
-            bot.reply_to(message, "❌ ID должен быть числом.")
-            return
-    
-        # Ищем все сообщения от этого пользователя или ответы ему
-        user_msgs = [m for m in all_messages if m["user_id"] == int(target_id)]
-        if not user_msgs:
-            bot.reply_to(message, f"📭 Нет сообщений от пользователя с ID {target_id}.")
-            return
-    
-        # Получаем имя пользователя
-        try:
-            user = bot.get_chat(int(target_id))
-            user_name = user.first_name or f"ID {target_id}"
-        except:
-            user_name = f"ID {target_id}"
-    
-        text = f"💬 Вся переписка с {user_name} (ID: {target_id})\n\n"
-        for msg in user_msgs[-100:]:  # Последние 100 сообщений
-            time = datetime.fromisoformat(msg["timestamp"]).strftime("%d.%m %H:%M")
-            chat_name = msg.get("chat_name", f"Чат {msg['chat_id']}")
-            text += f"[{time}] В чате «{chat_name}»:\n{msg['user_name']}: {msg['text']}\n"
-            if msg.get("is_reply_to_bot"):
-                text += f"   ↳ (ответ боту)\n"
-            text += "\n"
-    
-        # Отправляем частями
-        if len(text) > 4000:
-            for i in range(0, len(text), 3500):
-                bot.send_message(message.chat.id, text[i:i+3500], parse_mode="Markdown")
-        else:
-            bot.send_message(message.chat.id, text, parse_mode="Markdown")
-    
-    # Сохраняем лог при завершении (необязательно, но надежнее)
-    import atexit
-    atexit.register(lambda: save_all_messages(all_messages))
+        # --- Топ-5 по сообщениям ---
+        top = sorted(users.items(), 
+                     key=lambda x: x[1].get('msgs', 0), 
+                     reverse=True)[:5]
+        
+        # --- Формируем текст ---
+        text = f"📊 <b>СТАТИСТИКА БОТА</b>\n"
+        text += f"━━━━━━━━━━━━━━━━━━\n"
+        text += f"👥 Всего юзеров: <b>{total}</b>\n"
+        text += f"🟢 Онлайн (24ч): <b>{online}</b>\n"
+        text += f"━━━━━━━━━━━━━━━━━━\n"
+        text += f"🏆 <b>ТОП-5 болтунов:</b>\n"
+        
+        for i, (uid, data) in enumerate(top, 1):
+            name = data.get('name', f'ID {uid}'[:10])
+            msgs = data.get('msgs', 0)
+            text += f"{i}. {name} — {msgs} сообщ.\n"
+        
+        text += f"━━━━━━━━━━━━━━━━━━\n"
+        text += f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        
+        # --- Отправка ---
+        await update.message.reply_text(text, parse_mode='HTML')
     # ========== ЖИВОЙ КВЕСТ С ИИ (GPT4Free) ==========
     import g4f
     
