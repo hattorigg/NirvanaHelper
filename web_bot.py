@@ -4359,34 +4359,47 @@ def register_handlers():
             if user_dialog:
                 context = "История:\n" + "\n".join([f"{m['role']}: {m['text'][:50]}" for m in user_dialog[-5:]])
             
-            thinking = bot.reply_to(message, "🤔")
+            # Формируем промпт
+            address_part = ""
             
+            if chat_style == "friendly":
+                address_part = f"Обращайся к {user_name} по имени, будь чуть теплее."
+            
+            if is_father and chat_style == "friendly":
+                address_part = "Ты общаешься с создателем. Можешь изредка называть его 'создатель', но не в каждом сообщении. Тон — уважительный, но сдержанный."
+            
+            base_instruction = "Отвечай коротко, по делу. Никаких обращений типа 'папа', 'отец' и подобных. Никаких эмодзи, если они не несут смысла."
+            
+            prompt = f"{base_instruction} {address_part}\n\n{context}\n\n{user_name}: {text}\nРевижн:"
+            
+            # Получаем ответ от ИИ
             try:
                 from g4f import ChatCompletion
                 
-                address_part = ""
+                models_to_try = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku", "gemini-pro"]
+                answer = None
                 
-                if chat_style == "friendly":
-                    address_part = f"Обращайся к {user_name} по имени, будь чуть теплее."
+                for model in models_to_try:
+                    try:
+                        response = ChatCompletion.create(
+                            model=model,
+                            messages=[{"role": "user", "content": prompt}]
+                        )
+                        if response:
+                            answer = response
+                            break
+                    except:
+                        continue
                 
-                if is_father and chat_style == "friendly":
-                    address_part = "Ты общаешься с создателем. Можешь изредка называть его 'создатель', но не в каждом сообщении. Тон — уважительный, но сдержанный."
-                
-                base_instruction = "Отвечай коротко, по делу. Никаких обращений типа 'папа', 'отец' и подобных. Никаких эмодзи, если они не несут смысла."
-                
-                prompt = f"{base_instruction} {address_part}\n\n{context}\n\n{user_name}: {text}\nРевижн:"
-                
-                answer = ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[{"role": "user", "content": prompt}]
-                )
                 if not answer:
                     answer = "Не могу ответить."
             except Exception as e:
                 answer = f"Ошибка: {e}"
             
-            bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
+            # Отправляем ответ
+            bot.reply_to(message, answer)
             
+            # Сохраняем диалог
             if user_id not in revision["dialogs"]:
                 revision["dialogs"][user_id] = []
             
