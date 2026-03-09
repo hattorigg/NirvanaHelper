@@ -4377,7 +4377,7 @@ def register_handlers():
                 prompt = f"{base_instruction} {address_part}\n\n{context}\n\n{user_name}: {text}\nРевижн:"
                 
                 answer = ChatCompletion.create(
-                    model="gpt-3.5-turbo",
+                    model="gpt-4",
                     messages=[{"role": "user", "content": prompt}]
                 )
                 if not answer:
