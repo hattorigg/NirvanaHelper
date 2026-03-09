@@ -4405,11 +4405,11 @@ def register_handlers():
         if len(revision["dialogs"][user_id]) > 50:
             revision["dialogs"][user_id] = revision["dialogs"][user_id][-50:]
     
-    revision["last_talk_time"] = datetime.now().isoformat()
-    save_revision(revision)
+        revision["last_talk_time"] = datetime.now().isoformat()
+        save_revision(revision)
     
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ошибка: {e}")
 
     # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
     def revision_remember_event(event_type, details):
