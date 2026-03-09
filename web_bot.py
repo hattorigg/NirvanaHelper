@@ -4312,12 +4312,13 @@ def register_handlers():
         return revision.get("wants_to_talk", False)
     
     schedule.every().hour.do(update_revision_mood)
+
     # ========== РЕВИЖН — ОБЩЕНИЕ ==========
     FATHER_ID = 6001013593
     
     # Хранилище настроек общения для каждого пользователя
     if "user_chat_style" not in revision:
-        revision["user_chat_style"] = {}  # user_id: "default" или "friendly"
+        revision["user_chat_style"] = {}
     
     @bot.message_handler(func=lambda message: 
         (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
@@ -4336,7 +4337,6 @@ def register_handlers():
             if not text:
                 text = "привет"
             
-            # Проверяем, не хочет ли человек изменить стиль
             if any(word in text.lower() for word in ["общайся нежно", "будь милым", "общайся мило"]):
                 revision["user_chat_style"][user_id] = "friendly"
                 save_revision(revision)
@@ -4350,10 +4350,8 @@ def register_handlers():
                 bot.reply_to(message, "Понял, возвращаю обычный стиль.")
                 return
             
-            # Определяем стиль общения
             chat_style = revision["user_chat_style"].get(user_id, "default")
             
-            # Загружаем историю
             if "dialogs" not in revision:
                 revision["dialogs"] = {}
             
@@ -4367,19 +4365,14 @@ def register_handlers():
             try:
                 from g4f import ChatCompletion
                 
-                # --- ЛОГИКА ОБРАЩЕНИЙ ---
-                # Для всех (включая создателя) по умолчанию — БЕЗ обращений
                 address_part = ""
                 
-                # Только если стиль friendly или если это создатель и он сам попросил
                 if chat_style == "friendly":
                     address_part = f"Обращайся к {user_name} по имени, будь чуть теплее."
                 
-                # Для создателя особый случай: может использовать "создатель", но только если он попросил
                 if is_father and chat_style == "friendly":
                     address_part = "Ты общаешься с создателем. Можешь изредка называть его 'создатель', но не в каждом сообщении. Тон — уважительный, но сдержанный."
                 
-                # Базовая инструкция
                 base_instruction = "Отвечай коротко, по делу. Никаких обращений типа 'папа', 'отец' и подобных. Никаких эмодзи, если они не несут смысла."
                 
                 prompt = f"{base_instruction} {address_part}\n\n{context}\n\n{user_name}: {text}\nРевижн:"
@@ -4392,10 +4385,8 @@ def register_handlers():
                     answer = "Не могу ответить."
             except Exception as e:
                 answer = f"Ошибка: {e}"
-            
-            bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
-            
-        # Сохраняем диалог
+                bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
+        
         if user_id not in revision["dialogs"]:
             revision["dialogs"][user_id] = []
         
@@ -4407,10 +4398,9 @@ def register_handlers():
     
         revision["last_talk_time"] = datetime.now().isoformat()
         save_revision(revision)
-    
+        
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка: {e}")
-
     # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
     def revision_remember_event(event_type, details):
         """Ревижн запоминает важное событие"""
