@@ -4395,21 +4395,22 @@ def register_handlers():
             
             bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
             
-            # Сохраняем диалог
-            if user_id not in revision["dialogs"]:
-                revision["dialogs"][user_id] = []
-            
-            revision["dialogs"][user_id].append({"role": user_name, "text": text, "time": datetime.now().isoformat()})
-            revision["dialogs"][user_id].append({"role": "Ревижн", "text": answer, "time": datetime.now().isoformat()})
+        # Сохраняем диалог
+        if user_id not in revision["dialogs"]:
+            revision["dialogs"][user_id] = []
         
-            if len(revision["dialogs"][user_id]) > 50:
+        revision["dialogs"][user_id].append({"role": user_name, "text": text, "time": datetime.now().isoformat()})
+        revision["dialogs"][user_id].append({"role": "Ревижн", "text": answer, "time": datetime.now().isoformat()})
+    
+        if len(revision["dialogs"][user_id]) > 50:
             revision["dialogs"][user_id] = revision["dialogs"][user_id][-50:]
-        
-        revision["last_talk_time"] = datetime.now().isoformat()
-        save_revision(revision)
-        
-    except Exception as e:
-        bot.reply_to(message, f"❌ Ошибка: {e}")
+    
+    revision["last_talk_time"] = datetime.now().isoformat()
+    save_revision(revision)
+    
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка: {e}")
+
     # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
     def revision_remember_event(event_type, details):
         """Ревижн запоминает важное событие"""
