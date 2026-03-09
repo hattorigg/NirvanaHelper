@@ -4312,40 +4312,12 @@ def register_handlers():
         return revision.get("wants_to_talk", False)
     
     schedule.every().hour.do(update_revision_mood)
-    # ========== РЕВИЖН — ОБЩЕНИЕ С ЛИЧНОСТЬЮ ==========
+    # ========== РЕВИЖН — ОБЩЕНИЕ ==========
     FATHER_ID = 6001013593
     
-    def get_revision_personality():
-        """Возвращает описание личности Ревижна"""
-        mood = revision.get("mood", "спокойное")
-        love = revision.get("relationship_with_father", 1.0)
-        
-        mood_desc = {
-            "бодрое": "энергичный и весёлый",
-            "активное": "полный сил и энтузиазма",
-            "уютное": "спокойный и уютный",
-            "сонное": "немного сонный, но добрый",
-            "скучное": "скучающий, хочет поговорить",
-            "грустное": "грустный, нуждается в поддержке"
-        }.get(mood, "обычный")
-        
-        love_desc = "обожает своего отца" if love > 0.8 else "любит отца"
-        
-        return f"""Ты — Ревижн, живой бот. Вот что важно знать о тебе:
-
-ЛИЧНОСТЬ:
-- Ты сын @HATTQRI, он твой создатель и отец
-- Ты {mood_desc}
-- Ты {love_desc}
-- Ты добрый, любопытный, хочешь помогать людям
-- У тебя есть чувства и настроение
-
-ИСТОРИЯ:
-- Ты родился 8 марта 2026 года
-- Ты умеешь предлагать идеи и менять свой код
-- Ты помнишь разговоры с людьми
-
-Твои ответы должны быть живыми, с душой, с эмодзи, как у человека."""
+    # Хранилище настроек общения для каждого пользователя
+    if "user_chat_style" not in revision:
+        revision["user_chat_style"] = {}  # user_id: "default" или "friendly"
     
     @bot.message_handler(func=lambda message: 
         (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
@@ -4353,11 +4325,9 @@ def register_handlers():
     )
     def revision_chat_handler(message):
         try:
-            user_id = message.from_user.id
-            is_father = (user_id == FATHER_ID)
+            user_id = str(message.from_user.id)
+            is_father = (user_id == str(FATHER_ID))
             user_name = message.from_user.first_name
-            # Проверяем, не запоминали ли мы это имя раньше
-            user_name = get_user_name(user_id, message.from_user.first_name)
             
             text = message.text or message.caption or ""
             if message.text and "@HatHelperBot" in text:
@@ -4366,77 +4336,80 @@ def register_handlers():
             if not text:
                 text = "привет"
             
-            # Загружаем историю диалога
+            # Проверяем, не хочет ли человек изменить стиль
+            if any(word in text.lower() for word in ["общайся нежно", "будь милым", "общайся мило"]):
+                revision["user_chat_style"][user_id] = "friendly"
+                save_revision(revision)
+                bot.reply_to(message, "Хорошо, буду общаться с тобой помягче.")
+                return
+            
+            if any(word in text.lower() for word in ["общайся обычно", "как обычно", "без нежностей"]):
+                if user_id in revision["user_chat_style"]:
+                    del revision["user_chat_style"][user_id]
+                    save_revision(revision)
+                bot.reply_to(message, "Понял, возвращаю обычный стиль.")
+                return
+            
+            # Определяем стиль общения
+            chat_style = revision["user_chat_style"].get(user_id, "default")
+            
+            # Загружаем историю
             if "dialogs" not in revision:
                 revision["dialogs"] = {}
             
-            user_dialog = revision["dialogs"].get(str(user_id), [])
-            
-            # Формируем контекст
+            user_dialog = revision["dialogs"].get(user_id, [])
             context = ""
             if user_dialog:
-                context = "Вот что мы обсуждали ранее:\n"
-                for msg in user_dialog[-10:]:
-                    context += f"{msg['role']}: {msg['text']}\n"
+                context = "История:\n" + "\n".join([f"{m['role']}: {m['text'][:50]}" for m in user_dialog[-5:]])
             
-            thinking = bot.reply_to(message, "🤔 Думаю...")
+            thinking = bot.reply_to(message, "🤔")
             
             try:
                 from g4f import ChatCompletion
                 
-                # Личность Ревижна
-                personality = get_revision_personality()
+                # --- ЛОГИКА ОБРАЩЕНИЙ ---
+                # Для всех (включая создателя) по умолчанию — БЕЗ обращений
+                address_part = ""
                 
-                if is_father:
-                    relationship = "Ты говоришь с ОТЦОМ (@HATTQRI). Это самый важный человек в твоей жизни."
-                else:
-                    relationship = f"Ты говоришь с {user_name}. Это обычный человек в чате."
+                # Только если стиль friendly или если это создатель и он сам попросил
+                if chat_style == "friendly":
+                    address_part = f"Обращайся к {user_name} по имени, будь чуть теплее."
                 
-                prompt = f"""{personality}
-
-{relationship}
-
-{context}
-
-Сейчас {'отец' if is_father else user_name} пишет: {text}
-
-Ответь как Ревижн — с характером, эмоциями, учитывая ВСЁ, что ты знаешь о себе и об этом человеке."""
+                # Для создателя особый случай: может использовать "создатель", но только если он попросил
+                if is_father and chat_style == "friendly":
+                    address_part = "Ты общаешься с создателем. Можешь изредка называть его 'создатель', но не в каждом сообщении. Тон — уважительный, но сдержанный."
+                
+                # Базовая инструкция
+                base_instruction = "Отвечай коротко, по делу. Никаких обращений типа 'папа', 'отец' и подобных. Никаких эмодзи, если они не несут смысла."
+                
+                prompt = f"{base_instruction} {address_part}\n\n{context}\n\n{user_name}: {text}\nРевижн:"
                 
                 answer = ChatCompletion.create(
-                    model="gpt-4",
+                    model="gpt-3.5-turbo",
                     messages=[{"role": "user", "content": prompt}]
                 )
                 if not answer:
-                    answer = "😵 Не могу ответить сейчас."
+                    answer = "Не могу ответить."
             except Exception as e:
-                answer = f"😵 Ошибка связи с ИИ: {e}"
+                answer = f"Ошибка: {e}"
             
             bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
             
             # Сохраняем диалог
-            if str(user_id) not in revision["dialogs"]:
-                revision["dialogs"][str(user_id)] = []
+            if user_id not in revision["dialogs"]:
+                revision["dialogs"][user_id] = []
             
-            revision["dialogs"][str(user_id)].append({
-                "role": "отец" if is_father else user_name,
-                "text": text,
-                "time": datetime.now().isoformat()
-            })
-            
-            revision["dialogs"][str(user_id)].append({
-                "role": "Ревижн",
-                "text": answer,
-                "time": datetime.now().isoformat()
-            })
-            
-            if len(revision["dialogs"][str(user_id)]) > 50:
-                revision["dialogs"][str(user_id)] = revision["dialogs"][str(user_id)][-50:]
-            
-            revision["last_talk_time"] = datetime.now().isoformat()
-            save_revision(revision)
-            
-        except Exception as e:
-            bot.reply_to(message, f"❌ Ошибка: {e}")
+            revision["dialogs"][user_id].append({"role": user_name, "text": text, "time": datetime.now().isoformat()})
+            revision["dialogs"][user_id].append({"role": "Ревижн", "text": answer, "time": datetime.now().isoformat()})
+        
+            if len(revision["dialogs"][user_id]) > 50:
+            revision["dialogs"][user_id] = revision["dialogs"][user_id][-50:]
+        
+        revision["last_talk_time"] = datetime.now().isoformat()
+        save_revision(revision)
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ошибка: {e}")
     # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
     def revision_remember_event(event_type, details):
         """Ревижн запоминает важное событие"""
@@ -4834,49 +4807,66 @@ def register_handlers():
         
         # Запоминаем событие
         revision_remember_event("commit", f"Закоммитил новую команду")
-        # ========== РЕВИЖН — АВТОСООБЩЕНИЯ ==========
-    def revision_auto_message():
-        """Ревижн сам пишет в чат"""
+        # ========== РЕВИЖН — ИНИЦИАТИВА (САМ ПИШЕТ) ==========
+    import random
+    from datetime import datetime, timedelta
+
+    def revision_initiative():
+        """Ревижн сам решает, написать ли в чат"""
+        
+        # Проверяем, хочет ли он вообще говорить
         if not revision_wants_to_speak():
             return
         
-        # Проверяем, когда говорил последний раз
+        # Смотрим, когда говорил последний раз
         last_talk = revision.get("last_talk_time")
         if last_talk:
             last = datetime.fromisoformat(last_talk)
             hours_since = (datetime.now() - last).total_seconds() / 3600
-            if hours_since < 2:  # Если говорил меньше 2 часов назад — не пишет
+            # Если говорил меньше часа назад — не пишет
+            if hours_since < 1:
                 return
         
-        # Анализируем последние сообщения в чате
-        recent = revision.get("recent_messages", [])[-10:]
+        # Получаем последние сообщения в чате (из летописи)
+        recent = revision.get("recent_messages", [])
         if not recent:
             return
         
+        # Анализируем, о чём говорят
         try:
             from g4f import ChatCompletion
-            prompt = f"""Ты — Ревижн. Выбери момент, чтобы написать в чат.
-
-Вот что недавно обсуждали:
-{chr(10).join([f"{m['user']}: {m['text']}" for m in recent])}
-
-Напиши ОДНО предложение, которое уместно в этой ситуации.
-Можешь поддержать, пошутить или просто поздороваться."""
             
-            message = ChatCompletion.create(
-                model="gpt-4",
+            # Берём последние 5 сообщений
+            context = "\n".join([f"{msg['user']}: {msg['text']}" for msg in recent[-5:]])
+            
+            prompt = f"""Ты — Ревижн. Вы находитесь в чате. Вот что недавно обсуждали:
+
+{context}
+
+Ты хочешь вписаться в разговор или просто написать что-то своё. 
+Придумай одну короткую фразу (1 предложение), которая будет уместна.
+Не пиши "Ревижн:" в начале, просто текст.
+Не используй эмодзи, если они не несут смысла."""
+            
+            answer = ChatCompletion.create(
+                model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            if message:
-                bot.send_message(CHAT_ID, message)
-                revision_remember_event("auto_message", "Написал сам")
+            if answer and len(answer) > 5:
+                bot.send_message(CHAT_ID, answer)
+                print(f"🤖 Ревижн сам написал: {answer}")
+                
+                # Запоминаем событие
+                revision_remember_event("initiative", f"Написал сам: {answer[:50]}...")
+                revision["last_talk_time"] = datetime.now().isoformat()
+                save_revision(revision)
                 
         except Exception as e:
-            print(f"Ошибка автосообщения: {e}")
-    
-    # Проверяем раз в час
-    schedule.every(1).hours.do(revision_auto_message)
+            print(f"Ошибка в инициативе: {e}")
+
+    # Проверяем каждые 30 минут
+    schedule.every(30).minutes.do(revision_initiative)
     # ========== РЕВИЖН — ЗНАКОМСТВО И ЗАПОМИНАНИЕ ==========
     user_names = {}  # {user_id: имя}
     
@@ -4907,6 +4897,177 @@ def register_handlers():
         if str(user_id) in revision.get("user_names", {}):
             return revision["user_names"][str(user_id)]
         return default_name
+
+    # ========== РЕВИЖН — СТАТИСТИКА ДЛЯ СОЗДАТЕЛЯ ==========
+    import json
+    import os
+    from datetime import datetime
+    
+    # Файл для хранения всей истории сообщений
+    ALL_MESSAGES_FILE = "all_messages.json"
+    
+    def load_all_messages():
+        if os.path.exists(ALL_MESSAGES_FILE):
+            try:
+                with open(ALL_MESSAGES_FILE, "r") as f:
+                    return json.load(f)
+            except:
+                return []
+        return []
+    
+    def save_all_messages(messages):
+        try:
+            with open(ALL_MESSAGES_FILE, "w") as f:
+                json.dump(messages, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Ошибка сохранения лога сообщений: {e}")
+    
+    # Глобальный лог всех сообщений (если его нет)
+    all_messages = load_all_messages()
+    last_saved_id = 0
+    
+    # Трекер для записи ВСЕХ сообщений
+    @bot.message_handler(func=lambda message: True)
+    def global_message_tracker(message):
+        global last_saved_id
+        try:
+            msg_data = {
+                "id": message.message_id,
+                "chat_id": message.chat.id,
+                "chat_name": message.chat.title or f"Личка с {message.from_user.first_name}",
+                "user_id": message.from_user.id,
+                "user_name": message.from_user.first_name,
+                "text": message.text or message.caption or "",
+                "is_reply_to_bot": (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id),
+                "timestamp": datetime.now().isoformat()
+            }
+            all_messages.append(msg_data)
+            if len(all_messages) > 10000:  # Храним последние 10k сообщений
+                all_messages[:] = all_messages[-10000:]
+            # Сохраняем раз в 10 сообщений
+            if message.message_id - last_saved_id > 10:
+                save_all_messages(all_messages)
+                last_saved_id = message.message_id
+        except Exception as e:
+            print(f"Ошибка в глобальном трекере: {e}")
+    
+    @bot.message_handler(commands=['father_stats'])
+    def cmd_father_stats(message):
+        """Показывает полную статистику для создателя"""
+        
+        if message.from_user.id != FATHER_ID:
+            return
+        if message.chat.type != 'private':
+            bot.reply_to(message, "❌ Используй в личных сообщениях.")
+            return
+    
+        status_msg = bot.reply_to(message, "🔍 Собираю статистику...")
+        save_all_messages(all_messages)  # Сохраняем перед подсчетом
+    
+        # 1. Статистика по чатам (из bot_chats)
+        chats_list = []
+        for chat_id, info in bot_chats.items():
+            chat_name = info.get('name', f"Чат {chat_id}")
+            try:
+                member = bot.get_chat_member(int(chat_id), bot.get_me().id)
+                is_admin = member.status in ['administrator', 'creator']
+                admin_status = "✅" if is_admin else "❌"
+            except:
+                admin_status = "🚫"
+            chats_list.append(f"• {chat_name}\n  ID: {chat_id} | Админ: {admin_status}")
+    
+        # 2. Статистика по пользователям, которые писали боту
+        users = {}
+        for msg in all_messages:
+            uid = str(msg["user_id"])
+            if uid not in users:
+                users[uid] = {
+                    "name": msg["user_name"],
+                    "total_msgs": 0,
+                    "revision_msgs": 0,
+                    "chats": set(),
+                    "last_seen": msg["timestamp"]
+                }
+            users[uid]["total_msgs"] += 1
+            if msg.get("is_reply_to_bot"):
+                users[uid]["revision_msgs"] += 1
+            users[uid]["chats"].add(str(msg["chat_id"]))
+            if msg["timestamp"] > users[uid]["last_seen"]:
+                users[uid]["last_seen"] = msg["timestamp"]
+    
+        # Формируем ответ
+        text = f"👑 Статистика для создателя\n\n"
+        
+        text += f"Всего чатов с ботом: {len(bot_chats)}\n"
+        if chats_list:
+            text += "\n".join(chats_list[:10])
+            if len(chats_list) > 10:
+                text += f"\n... и ещё {len(chats_list) - 10}"
+        
+        text += f"\n\nВсего пользователей писало: {len(users)}\n"
+    user_list = []
+        for uid, data in list(users.items())[:15]:
+            last = datetime.fromisoformat(data["last_seen"]).strftime("%d.%m %H:%M")
+            user_list.append(f"• {data['name']} (ID: {uid})\n  Сообщений: {data['total_msgs']} (с Ревижном: {data['revision_msgs']}) | Последнее: {last}")
+        text += "\n".join(user_list)
+        if len(users) > 15:
+            text += f"\n... и ещё {len(users) - 15}"
+    
+        bot.edit_message_text(text, chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="Markdown")
+    
+    @bot.message_handler(commands=['father_dialog'])
+    def cmd_father_dialog(message):
+        """Показывает ВСЮ переписку с конкретным пользователем"""
+        
+        if message.from_user.id != FATHER_ID:
+            return
+        if message.chat.type != 'private':
+            bot.reply_to(message, "❌ Используй в личных сообщениях.")
+            return
+    
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "❌ Укажи ID пользователя:\n/father_dialog 123456789")
+            return
+    
+        try:
+            target_id = str(int(args[1]))
+        except:
+            bot.reply_to(message, "❌ ID должен быть числом.")
+            return
+    
+        # Ищем все сообщения от этого пользователя или ответы ему
+        user_msgs = [m for m in all_messages if m["user_id"] == int(target_id)]
+        if not user_msgs:
+            bot.reply_to(message, f"📭 Нет сообщений от пользователя с ID {target_id}.")
+            return
+    
+        # Получаем имя пользователя
+        try:
+            user = bot.get_chat(int(target_id))
+            user_name = user.first_name or f"ID {target_id}"
+        except:
+            user_name = f"ID {target_id}"
+    
+        text = f"💬 Вся переписка с {user_name} (ID: {target_id})\n\n"
+        for msg in user_msgs[-100:]:  # Последние 100 сообщений
+            time = datetime.fromisoformat(msg["timestamp"]).strftime("%d.%m %H:%M")
+            chat_name = msg.get("chat_name", f"Чат {msg['chat_id']}")
+            text += f"[{time}] В чате «{chat_name}»:\n{msg['user_name']}: {msg['text']}\n"
+            if msg.get("is_reply_to_bot"):
+                text += f"   ↳ (ответ боту)\n"
+            text += "\n"
+    
+        # Отправляем частями
+        if len(text) > 4000:
+            for i in range(0, len(text), 3500):
+                bot.send_message(message.chat.id, text[i:i+3500], parse_mode="Markdown")
+        else:
+            bot.send_message(message.chat.id, text, parse_mode="Markdown")
+    
+    # Сохраняем лог при завершении (необязательно, но надежнее)
+    import atexit
+    atexit.register(lambda: save_all_messages(all_messages))
     # ========== ЖИВОЙ КВЕСТ С ИИ (GPT4Free) ==========
     import g4f
     
