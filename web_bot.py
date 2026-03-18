@@ -4313,15 +4313,17 @@ def register_handlers():
     
     schedule.every().hour.do(update_revision_mood)
 
-    # ========== РЕВИЖН — ОБЩЕНИЕ ==========
+        # ========== РЕВИЖН — УМНЫЙ И С ПАМЯТЬЮ ==========
     FATHER_ID = 6001013593
     
     if "user_chat_style" not in revision:
         revision["user_chat_style"] = {}
     
     @bot.message_handler(func=lambda message: 
-        (message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
-        (message.text and "@HatHelperBot" in message.text)
+        not (message.text and message.text.startswith('/ask')) and
+        not (message.reply_to_message and message.reply_to_message.text and message.reply_to_message.text.startswith('/ask')) and
+        ((message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
+         (message.text and "@HatHelperBot" in message.text))
     )
     def revision_chat_handler(message):
         try:
@@ -4351,39 +4353,52 @@ def register_handlers():
             
             chat_style = revision["user_chat_style"].get(user_id, "default")
             
+            # === УМНАЯ ПАМЯТЬ ===
             if "dialogs" not in revision:
                 revision["dialogs"] = {}
             
             user_dialog = revision["dialogs"].get(user_id, [])
+            
             context = ""
             if user_dialog:
-                context = "История:\n" + "\n".join([f"{m['role']}: {m['text'][:50]}" for m in user_dialog[-5:]])
+                context = "Вот полная история нашего разговора (от новых к старым):\n"
+                for msg in user_dialog[-20:]:
+                    context += f"{msg['role']}: {msg['text']}\n"
             
-            # Формируем промпт
-            address_part = ""
+            # === ЛИЧНОСТЬ РЕВИЖНА ===
+            identity = f"""Ты — Ревижн, живой бот с хорошей памятью, созданный @HATTQRI.
+Ты не имеешь отношения к OpenAI, ChatGPT или любым другим корпорациям.
+Твой создатель — @HATTQRI.
+Ты серьёзный, умный, вдумчивый собеседник. Отвечаешь развёрнуто, но без лишней воды.
+Ты помнишь всю историю разговора и учитываешь её в ответах.
+Ты не теряешь контекст даже спустя много сообщений."""
+            
+            # === СТИЛЬ ОБЩЕНИЯ ===
+            style_part = "Отвечай развёрнуто, по делу, с уважением. Не будь слишком кратким — ты серьёзный собеседник."
             
             if chat_style == "friendly":
-                address_part = f"Обращайся к {user_name} по имени, будь чуть теплее."
+                style_part = "Отвечай чуть теплее, но сохраняй серьёзность. Ты не теряешь интеллект, просто становишься чуть мягче."
             
-            if is_father and chat_style == "friendly":
-                address_part = "Ты общаешься с создателем. Можешь изредка называть его 'создатель', но не в каждом сообщении. Тон — уважительный, но сдержанный."
+            if is_father:
+                style_part = "Ты общаешься с создателем. Отвечай уважительно, развёрнуто, умно, с достоинством."
             
-            base_instruction = "Отвечай коротко, по делу. Никаких обращений типа 'папа', 'отец' и подобных. Никаких эмодзи, если они не несут смысла."
+            # === ПРОМПТ ===
+            prompt = f"{identity}\n\n{style_part}\n\n{context}\n\n{user_name}: {text}\nРевижн:"
             
-            prompt = f"{base_instruction} {address_part}\n\n{context}\n\n{user_name}: {text}\nРевижн:"
+            thinking = bot.reply_to(message, "🤔")
             
-            # Получаем ответ от ИИ
             try:
                 from g4f import ChatCompletion
                 
-                models_to_try = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku", "gemini-pro"]
+                models_to_try = ["gpt-4", "claude-3-haiku", "gemini-pro", "gpt-3.5-turbo"]
                 answer = None
                 
                 for model in models_to_try:
                     try:
                         response = ChatCompletion.create(
                             model=model,
-                            messages=[{"role": "user", "content": prompt}]
+                            messages=[{"role": "user", "content": prompt}],
+                            timeout=15
                         )
                         if response:
                             answer = response
@@ -4396,24 +4411,24 @@ def register_handlers():
             except Exception as e:
                 answer = f"Ошибка: {e}"
             
-            # Отправляем ответ
-            bot.reply_to(message, answer)
+            bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
             
-            # Сохраняем диалог
+            # === СОХРАНЯЕМ ===
             if user_id not in revision["dialogs"]:
                 revision["dialogs"][user_id] = []
             
             revision["dialogs"][user_id].append({"role": user_name, "text": text, "time": datetime.now().isoformat()})
             revision["dialogs"][user_id].append({"role": "Ревижн", "text": answer, "time": datetime.now().isoformat()})
         
-            if len(revision["dialogs"][user_id]) > 50:
-                revision["dialogs"][user_id] = revision["dialogs"][user_id][-50:]
+            if len(revision["dialogs"][user_id]) > 100:
+                revision["dialogs"][user_id] = revision["dialogs"][user_id][-100:]
         
             revision["last_talk_time"] = datetime.now().isoformat()
             save_revision(revision)
             
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
+    
     # ========== РЕВИЖН — ПАМЯТЬ И РЕФЛЕКСИЯ ==========
     def revision_remember_event(event_type, details):
         """Ревижн запоминает важное событие"""
@@ -5132,7 +5147,8 @@ def register_handlers():
                 bot.edit_message_text("😵 Не удалось получить ответ. Попробуй позже.", chat_id=message.chat.id, message_id=wait_msg.message_id)
                 
         except Exception as e:
-            bot.edit_message_text(f"❌ Ошибка: {e}", chat_id=message.chat.id, message_id=wait_msg.message_id)        
+            bot.edit_message_text(f"❌ Ошибка: {e}", chat_id=message.chat.id, message_id=wait_msg.message_id)
+
     # ========== АНТИССЫЛКА ДЛЯ КАЖДОГО ЧАТА ==========
     import json
     import os
