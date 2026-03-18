@@ -5148,16 +5148,58 @@ def register_handlers():
                 
         except Exception as e:
             bot.edit_message_text(f"❌ Ошибка: {e}", chat_id=message.chat.id, message_id=wait_msg.message_id)
+            
+    # ========== ПОИСК (ЗАМЕНА /ASK) ==========
+    @bot.message_handler(func=lambda message: 
+        message.text and message.text.lower().startswith('поиск')
+    )
+    def cmd_search_handler(message):
+        try:
+            # Получаем текст после "поиск"
+            query = message.text[5:].strip()  # обрезаем "поиск"
+            if not query:
+                bot.reply_to(message, "❓ Напиши запрос после слова «поиск», например:\nпоиск столица Франции")
+                return
+    
+            # Показываем, что думаем
+            thinking = bot.reply_to(message, "🔍 Ищу...")
+    
+            # Подключаем ИИ
+            from g4f import ChatCompletion
+    
+            models_to_try = ["gpt-4", "claude-3-haiku", "gemini-pro", "gpt-3.5-turbo"]
+            answer = None
+    
+            for model in models_to_try:
+                try:
+                    response = ChatCompletion.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": "Ты — полезный ассистент. Отвечай на запрос чётко и по делу."},
+                            {"role": "user", "content": query}
+                        ],
+                        timeout=10
+                    )
+                    if response:
+                        answer = response
+                        break
+                except:
+                    continue
+    
+            if not answer:
+                answer = "❌ Не удалось найти ответ. Попробуй позже."
+    
+            bot.edit_message_text(f"🔎 Результат поиска:\n\n{answer}", chat_id=message.chat.id, message_id=thinking.message_id)
+    
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка: {e}")
 
-    # ========== АНТИССЫЛКА ДЛЯ КАЖДОГО ЧАТА ==========
-    import json
-    import os
+    # ========== АНТИССЫЛКА (УЛУЧШЕННАЯ) ==========
     import re
     import time
     
     ANTILINK_FILE = "antilink_settings.json"
     
-    # Загружаем настройки из файла
     def load_antilink_settings():
         if os.path.exists(ANTILINK_FILE):
             try:
@@ -5167,7 +5209,6 @@ def register_handlers():
                 return {}
         return {}
     
-    # Сохраняем настройки
     def save_antilink_settings(settings):
         try:
             with open(ANTILINK_FILE, "w") as f:
@@ -5175,7 +5216,6 @@ def register_handlers():
         except Exception as e:
             print(f"Ошибка сохранения настроек антиссылки: {e}")
     
-    # Загружаем при старте
     antilink_settings = load_antilink_settings()
     
     @bot.message_handler(commands=['antilink'])
@@ -5186,7 +5226,7 @@ def register_handlers():
         try:
             user_status = bot.get_chat_member(chat_id, message.from_user.id).status
             if user_status not in ['creator', 'administrator']:
-                bot.reply_to(message, "❌ Только администраторы чата могут включать/отключать антиссылку.")
+                bot.reply_to(message, "❌ Только администраторы чата могут управлять антиссылкой.")
                 return
         except Exception as e:
             print(f"Не удалось проверить права: {e}")
@@ -5200,11 +5240,11 @@ def register_handlers():
         if args[1].lower() in ['on', 'вкл', 'да']:
             antilink_settings[chat_id] = True
             save_antilink_settings(antilink_settings)
-            bot.reply_to(message, "🛡️ Антиссылка включена. Все ссылки и подозрительные сообщения от ботов будут удаляться.", parse_mode="Markdown")
+            bot.reply_to(message, "🛡️ Антиссылка включена. Все ссылки и подозрительные сообщения будут удаляться.", parse_mode="Markdown")
         elif args[1].lower() in ['off', 'выкл', 'нет']:
             antilink_settings[chat_id] = False
             save_antilink_settings(antilink_settings)
-            bot.reply_to(message, "🛡️ Антиссылка выключена. Ссылки разрешены.", parse_mode="Markdown")
+            bot.reply_to(message, "🛡️ Антиссылка выключена.", parse_mode="Markdown")
         else:
             bot.reply_to(message, "❌ Используй: /antilink on / off")
     
@@ -5221,47 +5261,56 @@ def register_handlers():
         if not antilink_settings.get(chat_id, False):
             return
     
+        # Кто отправил (бот или человек)
+        is_bot = message.from_user.is_bot
         should_delete = False
         delete_reason = ""
     
-        # КРИТЕРИИ УДАЛЕНИЯ
-        if message.from_user.is_bot and message.reply_markup:
+        # Текст сообщения (основной + подпись к медиа)
+        text = (message.text or message.caption or "").lower()
+    
+        # === 1. Проверка на ссылки в ТЕКСТЕ ===
+        # Регулярка ловит http, https, t.me, и короткие ссылки (goo.gl, bit.ly и т.п.)
+        url_pattern = r'(https?://|www\.)[^\s]+|t\.me/\S+|[a-zA-Z0-9\-]+\.(ru|com|org|net|io|me|tv|click|link|site)/\S*'
+        
+        if re.search(url_pattern, text, re.IGNORECASE):
             should_delete = True
-            delete_reason = "бот с кнопками"
+            delete_reason = "ссылка в тексте"
     
-        elif message.from_user.is_bot and message.text:
-            url_pattern = r'(https?://|www\.)[^\s]+|t\.me/\S+'
-            if re.search(url_pattern, message.text, re.IGNORECASE):
-                should_delete = True
-                delete_reason = "бот со ссылкой в тексте"
-    
-        elif message.reply_markup:
+        # === 2. Проверка на кнопки с URL ===
+        if not should_delete and message.reply_markup:
             if hasattr(message.reply_markup, 'inline_keyboard'):
                 for row in message.reply_markup.inline_keyboard:
                     for button in row:
-                        if button.url and 't.me/' in button.url and 'bot' in button.url.lower():
+                        if button.url:
                             should_delete = True
-                            delete_reason = "кнопка на другого бота"
+                            delete_reason = "кнопка с ссылкой"
                             break
                     if should_delete:
                         break
     
+        # === 3. Если сообщение от бота, но он не в белом списке — удаляем (опционально) ===
+        # Раскомментируй, если хочешь удалять вообще все сообщения от ботов
+        # if is_bot and message.from_user.id != bot.get_me().id:
+        #     should_delete = True
+        #     delete_reason = "сообщение от другого бота"
+    
+        # === 4. Удаление, если нужно ===
         if should_delete:
             try:
                 bot.delete_message(message.chat.id, message.message_id)
-                print(f"🧹 [Чат {chat_id}] Удалено сообщение от {message.from_user.first_name} (причина: {delete_reason})")
+                print(f"🧹 Удалено ({delete_reason}) от {message.from_user.first_name}")
     
-                # Отправляем и сразу удаляем предупреждение
+                # Отправляем и сразу удаляем предупреждение (через 5 секунд)
                 warning = bot.send_message(
                     message.chat.id,
                     f"⚠️ Удалено сообщение от {message.from_user.first_name} (причина: {delete_reason})"
                 )
-                time.sleep(3)
+                time.sleep(5)
                 bot.delete_message(message.chat.id, warning.message_id)
     
             except Exception as e:
                 print(f"❌ Не удалось удалить сообщение: {e}")
-    # ========== КОНЕЦ АНТИССЫЛКИ ==========
 
                 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
