@@ -4960,150 +4960,55 @@ def register_handlers():
         
         # --- Отправка ---
         await update.message.reply_text(text, parse_mode='HTML')
-    # ========== ЖИВОЙ КВЕСТ С ИИ (GPT4Free) ==========
-    import g4f
-    
-    STORY_FILE = "story_states.json"
-    GROUP_STORY_FILE = "group_story.json"
-    
-    def load_stories():
-        if os.path.exists(STORY_FILE):
-            try:
-                with open(STORY_FILE, "r") as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
-    
-    def save_stories(stories):
-        try:
-            with open(STORY_FILE, "w") as f:
-                json.dump(stories, f, indent=2)
-        except Exception as e:
-            print(f"Ошибка сохранения историй: {e}")
-    
-    def load_group_story(chat_id):
-        if os.path.exists(GROUP_STORY_FILE):
-            try:
-                with open(GROUP_STORY_FILE, "r") as f:
-                    data = json.load(f)
-                    return data.get(str(chat_id), "")
-            except:
-                return ""
-        return ""
-    
-    def save_group_story(chat_id, story):
-        data = {}
-        if os.path.exists(GROUP_STORY_FILE):
-            try:
-                with open(GROUP_STORY_FILE, "r") as f:
-                    data = json.load(f)
-            except:
-                pass
-        data[str(chat_id)] = story
-        try:
-            with open(GROUP_STORY_FILE, "w") as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            print(f"Ошибка сохранения групповой истории: {e}")
-    
-    user_stories = load_stories()
-    
-    def ask_gpt(prompt, context=""):
-        try:
-            from g4f import Model, ChatCompletion
-            
-            models_to_try = [
-                "gpt-4",
-                "gpt-3.5-turbo",
-                "gpt-4-turbo",
-                "claude-3-haiku",
-                "gemini-pro"
-            ]
-            
-            for model in models_to_try:
-                try:
-                    response = ChatCompletion.create(
-                        model=model,
-                        messages=[
-                            {"role": "system", "content": "Ты — мастер игры в текстовом квесте. Отвечай одним-двумя предложениями, продолжай историю. Будь креативен, создавай атмосферу. Используй эмодзи."},
-                            {"role": "user", "content": f"Контекст: {context}\n\nДействие игрока: {prompt}\n\nЧто происходит дальше?"}
-                        ]
-                    )
-                    if response:
-                        return response
-                except:
-                    continue
-            
-            return "❌ Не удалось получить ответ ни от одной модели. Попробуй позже."
-            
-        except Exception as e:
-            return f"❌ Ошибка: {e}"
-    
+
+    # ========== УЛУЧШЕННЫЕ КВЕСТЫ ==========
     @bot.message_handler(commands=['quest'])
     def cmd_quest(message):
         user_id = str(message.from_user.id)
         text = message.text.replace('/quest', '', 1).strip().lower()
     
+        # Если просто "quest" без текста — показываем справку
+        if not text:
+            bot.reply_to(message, "❓ Используй:\n"
+                                  "/quest начать — случайный квест\n"
+                                  "/quest твой текст — начать свою историю\n"
+                                  "/quest сброс — сбросить текущий квест")
+            return
+    
+        # Сброс квеста
+        if text == 'сброс' or text == 'reset':
+            if user_id in user_stories:
+                del user_stories[user_id]
+                save_stories(user_stories)
+                bot.reply_to(message, "✅ Твоя история сброшена. Можешь начать новую командой /quest")
+            else:
+                bot.reply_to(message, "❌ У тебя нет активной истории.")
+            return
+    
+        # Если пользователь пишет "начать" — генерируем случайный квест
         if text == 'начать' or text == 'start':
-            response = ask_gpt("Начни новую историю. Игрок просыпается в загадочном месте. Опиши обстановку.")
+            start_prompt = "Начни новую историю. Игрок просыпается в загадочном месте. Опиши обстановку одним-двумя предложениями."
+            response = ask_yandex_gpt(start_prompt, "")
             user_stories[user_id] = response
             save_stories(user_stories)
             bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}")
             return
     
-        if text == 'сброс' or text == 'reset':
-            if user_id in user_stories:
-                del user_stories[user_id]
-                save_stories(user_stories)
-                bot.reply_to(message, "✅ Твоя история сброшена.")
-            else:
-                bot.reply_to(message, "❌ У тебя нет активной истории.")
+        # Если есть активный квест — продолжаем
+        if user_id in user_stories:
+            context = user_stories[user_id]
+            response = ask_yandex_gpt(text, context)
+            user_stories[user_id] = context + "\n" + text + "\n" + response
+            save_stories(user_stories)
+            bot.reply_to(message, f"📖 ...\n\n{response}")
             return
     
-        if not text:
-            bot.reply_to(message, "❌ Используй:\n/quest начать — начать\n/quest действие — продолжить\n/quest сброс — сбросить")
-            return
-    
-        if user_id not in user_stories:
-            bot.reply_to(message, "❌ Сначала начни историю: /quest начать")
-            return
-    
-        context = user_stories[user_id]
-        response = ask_gpt(text, context)
-        user_stories[user_id] = context + "\n" + text + "\n" + response
+        # Если квеста нет — начинаем новый с текстом пользователя
+        start_prompt = f"Начни новую историю с такого начала: {text}"
+        response = ask_yandex_gpt(start_prompt, "")
+        user_stories[user_id] = response
         save_stories(user_stories)
-        bot.reply_to(message, f"📖 ...\n\n{response}")
-    
-    @bot.message_handler(commands=['groupquest'])
-    def cmd_groupquest(message):
-        chat_id = str(message.chat.id)
-        text = message.text.replace('/groupquest', '', 1).strip().lower()
-    
-        if text == 'начать' or text == 'start':
-            response = ask_gpt("Начни новую групповую историю. Несколько героев собираются вместе. Опиши место.")
-            save_group_story(chat_id, response)
-            bot.reply_to(message, f"🌍 Общая история начинается...\n\n{response}")
-            return
-    
-        if text == 'сброс' or text == 'reset':
-            save_group_story(chat_id, "")
-            bot.reply_to(message, "✅ Групповая история сброшена.")
-            return
-    
-        if not text:
-            bot.reply_to(message, "❌ Используй: /groupquest начать / действие / сброс")
-            return
-    
-        context = load_group_story(chat_id)
-        if not context:
-            bot.reply_to(message, "❌ Сначала начни общую историю: /groupquest начать")
-            return
-    
-        response = ask_gpt(text, context)
-        new_context = context + "\n" + text + "\n" + response
-        save_group_story(chat_id, new_context)
-        bot.reply_to(message, f"📜 ...\n\n{response}")
+        bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}")    
     # ========== ИИ-ЧАТ (ВОПРОСЫ) ==========
     @bot.message_handler(commands=['ask'])
     def cmd_ask(message):
