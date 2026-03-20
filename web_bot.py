@@ -5163,11 +5163,10 @@ def register_handlers():
     # ========== КРЕСТИКИ-НОЛИКИ (X0) ==========
     import random
     import time
-    from datetime import datetime
+    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
     STATS_FILE = "x0_stats.json"
     active_games = {}
-    game_invites = {}
     
     def load_x0_stats():
         if os.path.exists(STATS_FILE):
@@ -5187,27 +5186,14 @@ def register_handlers():
     
     x0_stats = load_x0_stats()
     
-    # === ПОГОДА ===
     WEATHER_EFFECTS = {
         "☀️ Солнечно": {"effect": "normal", "desc": "Обычная игра", "emoji": "☀️"},
         "🌧️ Дождь": {"effect": "wet", "desc": "Раз в 3 хода можно сделать ход в любую клетку", "emoji": "🌧️"},
         "🌫️ Туман": {"effect": "fog", "desc": "Следующий ход противника скрыт", "emoji": "🌫️"},
         "⚡ Гроза": {"effect": "storm", "desc": "Случайная клетка блокируется на 2 хода", "emoji": "⚡"},
-        "❄️ Снегопад": {"effect": "snow", "desc": "Ходы делаются через клетку", "emoji": "❄️"},
         "🌙 Ночь": {"effect": "night", "desc": "Видно только свои ходы", "emoji": "🌙"},
         "🌈 Радуга": {"effect": "rainbow", "desc": "После хода даёт случайный бонус", "emoji": "🌈", "rare": True},
-        "💫 Метеорит": {"effect": "meteor", "desc": "Случайная клетка становится ловушкой", "emoji": "💫", "rare": True},
-        "🌀 Магнитная буря": {"effect": "magnetic", "desc": "Крестики и нолики меняются местами на 2 хода", "emoji": "🌀", "rare": True}
     }
-    
-    BONUSES = [
-        {"name": "🔄 Допход", "effect": "extra_turn", "desc": "Сделайте ещё один ход!"},
-        {"name": "🔒 Блок", "effect": "block", "desc": "Следующий ход противника пропущен"},
-        {"name": "👁️ Провидец", "effect": "see", "desc": "Показывает следующий ход противника"},
-        {"name": "🌀 Хаос", "effect": "chaos", "desc": "Случайная клетка меняет владельца"},
-        {"name": "💪 Усиление", "effect": "power", "desc": "Следующий ход засчитывается за два"},
-        {"name": "🛡️ Защита", "effect": "shield", "desc": "Блокирует следующую атаку"}
-    ]
     
     def get_random_weather():
         if random.random() < 0.2:
@@ -5215,25 +5201,18 @@ def register_handlers():
             return random.choice(rare) if rare else "☀️ Солнечно"
         return random.choice([w for w in WEATHER_EFFECTS if not WEATHER_EFFECTS[w].get("rare")])
     
-    def get_random_bonus():
-        return random.choice(BONUSES)
-    
     def create_board(size=5):
         return [["⬜" for _ in range(size)] for _ in range(size)]
     
     def board_to_markup(board, game_id, size, disabled_cells=None):
-        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-        
         disabled_cells = disabled_cells or []
         markup = InlineKeyboardMarkup(row_width=size)
         buttons = []
-        
         for i in range(size):
             row = []
             for j in range(size):
                 cell = board[i][j]
                 disabled = (i, j) in disabled_cells
-                
                 if cell == "❌":
                     text = "❌"
                 elif cell == "⭕":
@@ -5242,11 +5221,8 @@ def register_handlers():
                     text = "🔒"
                 else:
                     text = "⬜"
-                
-                callback = f"x0_move_{game_id}_{i}_{j}"
-                row.append(InlineKeyboardButton(text, callback_data=callback))
+                row.append(InlineKeyboardButton(text, callback_data=f"x0_move_{game_id}_{i}_{j}"))
             buttons.append(row)
-        
         buttons.append([InlineKeyboardButton("🔄 Сдаться", callback_data=f"x0_surrender_{game_id}")])
         markup.keyboard = buttons
         return markup
@@ -5269,7 +5245,6 @@ def register_handlers():
         uid = str(user_id)
         if uid not in x0_stats:
             x0_stats[uid] = {"wins": 0, "losses": 0, "draws": 0, "score": 0}
-        
         if result == "win":
             x0_stats[uid]["wins"] += 1
             x0_stats[uid]["score"] += size * 10
@@ -5278,7 +5253,6 @@ def register_handlers():
         elif result == "draw":
             x0_stats[uid]["draws"] += 1
             x0_stats[uid]["score"] += (size * 10) // 2
-        
         save_x0_stats(x0_stats)
     
     @bot.message_handler(commands=['x0'])
@@ -5286,95 +5260,111 @@ def register_handlers():
         user_id = message.from_user.id
         target = None
         
-        # Если ответ на сообщение
+        # 1. Если ответ на сообщение
         if message.reply_to_message:
             target = message.reply_to_message.from_user
+        
+        # 2. Если есть аргумент с @username
         else:
             args = message.text.split()
             if len(args) > 1:
                 username = args[1].replace('@', '')
-                try:
-                    # Пытаемся найти пользователя по username через Telegram API
-                    target = bot.get_chat(f"@{username}")
-                except:
-                    bot.reply_to(message, f"❌ Пользователь @{username} не найден")
-                    return
+                found = False
+                # Ищем пользователя в чатах, где есть бот
+                for chat_id, info in bot_chats.items():
+                    try:
+                        members = bot.get_chat_administrators(int(chat_id))
+                        for member in members:
+                            if member.user.username and member.user.username.lower() == username.lower():
+                                target = member.user
+                                found = True
+                                break
+                        if found:
+                            break
+                    except:
+                        continue
+                
+                if not found:
+                    # Если не нашли, пробуем прямой запрос
+                    try:
+                        target = bot.get_chat(f"@{username}")
+                    except:
+                        bot.reply_to(message, f"❌ Пользователь @{username} не найден. Убедись, что он есть в общем чате с ботом.")
+                        return
         
-        if not target or target.id == user_id:
-            # Игра с ботом
-            game_id = f"x0_bot_{user_id}_{int(time.time())}"
+        # 3. Если нашли цель и это не сам пользователь
+        if target and target.id != user_id:
+            if target.is_bot:
+                bot.reply_to(message, "🤖 С ботами играй через `/x0` без указания")
+                return
+            
+            game_id = f"x0_{user_id}_{target.id}_{int(time.time())}"
             size = 5
             weather = get_random_weather()
             
-            game = {
+            active_games[game_id] = {
                 "id": game_id,
                 "player1": user_id,
-                "player2": "bot",
+                "player2": target.id,
                 "board": create_board(size),
                 "size": size,
                 "turn": user_id,
                 "weather": weather,
-                "weather_counter": 0,
                 "disabled_cells": [],
-                "status": "active"
+                "status": "waiting",
+                "chat_id": message.chat.id,
+                "invite_msg_id": None
             }
-            active_games[game_id] = game
             
-            weather_desc = WEATHER_EFFECTS[weather]["desc"]
-            weather_emoji = WEATHER_EFFECTS[weather]["emoji"]
-            markup = board_to_markup(game["board"], game_id, size)
+            markup = InlineKeyboardMarkup()
+            markup.add(
+                InlineKeyboardButton("✅ Принять", callback_data=f"x0_accept_{game_id}"),
+                InlineKeyboardButton("❌ Отказаться", callback_data=f"x0_decline_{game_id}")
+            )
             
-            text = f"🎮 **Крестики-нолики {size}x{size}**\n"
-            text += f"{weather_emoji} Погода: **{weather}**\n"
-            text += f"📖 {weather_desc}\n\n"
-            text += f"❌ Ваш ход (крестики)"
-            
-            bot.reply_to(message, text, parse_mode="Markdown", reply_markup=markup)
+            sent = bot.send_message(
+                message.chat.id,
+                f"⚔️ **{message.from_user.first_name} вызывает {target.first_name} на крестики-нолики!**\n\n"
+                f"🎮 Поле: {size}x{size}\n"
+                f"🌤️ Погода: {weather}\n"
+                f"📖 {WEATHER_EFFECTS[weather]['desc']}\n\n"
+                f"Принимаешь вызов?",
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+            active_games[game_id]["invite_msg_id"] = sent.message_id
+            bot.reply_to(message, f"⚔️ Вызов отправлен {target.first_name}!")
             return
         
-        if target.is_bot:
-            bot.reply_to(message, "🤖 С ботами играй через `/x0` без указания")
-            return
-        
-        # Вызов друга (существующий код)
-        game_id = f"x0_{user_id}_{target.id}_{int(time.time())}"
+        # 4. Если нет цели или это сам пользователь — игра с ботом
+        game_id = f"x0_bot_{user_id}_{int(time.time())}"
         size = 5
         weather = get_random_weather()
         
-        game_invites[str(target.id)] = game_id
-        active_games[game_id] = {
+        game = {
             "id": game_id,
             "player1": user_id,
-            "player2": target.id,
+            "player2": "bot",
             "board": create_board(size),
             "size": size,
             "turn": user_id,
             "weather": weather,
-            "weather_counter": 0,
             "disabled_cells": [],
-            "status": "waiting"
+            "status": "active",
+            "chat_id": message.chat.id
         }
+        active_games[game_id] = game
         
-        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-        markup = InlineKeyboardMarkup()
-        markup.add(
-            InlineKeyboardButton("✅ Принять", callback_data=f"x0_accept_{game_id}"),
-            InlineKeyboardButton("❌ Отказаться", callback_data=f"x0_decline_{game_id}")
-        )
+        weather_desc = WEATHER_EFFECTS[weather]["desc"]
+        weather_emoji = WEATHER_EFFECTS[weather]["emoji"]
+        markup = board_to_markup(game["board"], game_id, size)
         
-        bot.send_message(
-            target.id,
-            f"⚔️ **{message.from_user.first_name} вызывает тебя на крестики-нолики!**\n\n"
-            f"🎮 Поле: {size}x{size}\n"
-            f"🌤️ Погода: {weather}\n"
-            f"📖 {WEATHER_EFFECTS[weather]['desc']}\n\n"
-            f"Принимаешь вызов?",
-            parse_mode="Markdown",
-            reply_markup=markup
-        )
+        text = f"🎮 **Крестики-нолики {size}x{size}**\n"
+        text += f"{weather_emoji} Погода: **{weather}**\n"
+        text += f"📖 {weather_desc}\n\n"
+        text += f"❌ Ваш ход (крестики)"
         
-        bot.reply_to(message, f"⚔️ Вызов отправлен {target.first_name}!")
-
+        bot.reply_to(message, text, parse_mode="Markdown", reply_markup=markup)
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith('x0_'))
     def x0_callback(call):
@@ -5383,19 +5373,21 @@ def register_handlers():
         action = data[1]
         game_id = data[2]
         
+        game = active_games.get(game_id)
+        if not game:
+            bot.answer_callback_query(call.id, "❌ Игра не найдена или уже завершена")
+            return
+        
+        # Принятие вызова
         if action == "accept":
-            game = active_games.get(game_id)
-            if not game:
-                bot.answer_callback_query(call.id, "❌ Приглашение устарело")
+            if game["status"] != "waiting":
+                bot.answer_callback_query(call.id, "❌ Этот вызов уже неактивен")
                 return
-            
             if game["player2"] != user_id:
                 bot.answer_callback_query(call.id, "❌ Это не твой вызов")
                 return
             
             game["status"] = "active"
-            game_invites.pop(str(user_id), None)
-            
             weather_desc = WEATHER_EFFECTS[game["weather"]]["desc"]
             weather_emoji = WEATHER_EFFECTS[game["weather"]]["emoji"]
             markup = board_to_markup(game["board"], game_id, game["size"])
@@ -5407,65 +5399,59 @@ def register_handlers():
             
             bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
             bot.answer_callback_query(call.id, "🎮 Игра началась!")
-            
-            # Уведомляем первого игрока
-            bot.send_message(game["player1"], "⚔️ Соперник принял вызов! Игра началась.")
             return
         
-        elif action == "decline":
-            game = active_games.get(game_id)
-            if game:
-                bot.send_message(game["player1"], f"❌ {call.from_user.first_name} отказался от игры.")
+        # Отказ
+        if action == "decline":
+            if game["player2"] != user_id:
+                bot.answer_callback_query(call.id, "❌ Это не твой вызов")
+                return
+            bot.edit_message_text(f"❌ {call.from_user.first_name} отказался от игры.", chat_id=call.message.chat.id, message_id=call.message.message_id)
+            bot.send_message(game["player1"], f"❌ {call.from_user.first_name} отказался от игры.")
             active_games.pop(game_id, None)
-            game_invites.pop(str(user_id), None)
-            bot.edit_message_text("❌ Вызов отклонён", chat_id=call.message.chat.id, message_id=call.message.message_id)
             bot.answer_callback_query(call.id, "Вызов отклонён")
             return
         
-        elif action == "surrender":
-            game = active_games.get(game_id)
-            if not game:
-                bot.answer_callback_query(call.id, "❌ Игра не найдена")
+        # Сдача
+        if action == "surrender":
+            if game["status"] != "active":
+                bot.answer_callback_query(call.id, "❌ Игра уже завершена")
+                return
+            if user_id not in [game["player1"], game["player2"]]:
+                bot.answer_callback_query(call.id, "❌ Ты не участник этой игры")
                 return
             
-            loser = user_id
-            winner = game["player1"] if game["player1"] != loser else game["player2"]
-            
-            update_stats(loser, "loss", game["size"])
+            winner = game["player1"] if user_id == game["player2"] else game["player2"]
+            update_stats(user_id, "loss", game["size"])
             update_stats(winner, "win", game["size"])
             
-            text = f"🏳️ **{call.from_user.first_name} сдаётся!**\n\n"
-            text += f"🏆 Победитель: {winner}\n"
-            
+            text = f"🏳️ **{call.from_user.first_name} сдаётся!**\n\n🏆 Победитель: {winner}"
             bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown")
-            bot.send_message(winner, "🏆 Твой соперник сдался! Ты победил!")
+            bot.send_message(winner, f"🏆 Твой соперник сдался! Ты победил!")
             active_games.pop(game_id, None)
             bot.answer_callback_query(call.id, "Игра завершена")
             return
         
-        elif action == "move":
-            game = active_games.get(game_id)
-            if not game or game["status"] != "active":
-                bot.answer_callback_query(call.id, "❌ Игра не найдена или уже завершена")
+        # Ход
+        if action == "move":
+            if game["status"] != "active":
+                bot.answer_callback_query(call.id, "❌ Игра уже завершена")
                 return
-            
             if game["turn"] != user_id:
                 bot.answer_callback_query(call.id, "❌ Сейчас не твой ход")
                 return
             
             i, j = int(data[3]), int(data[4])
-            current_player = "❌" if game["turn"] == game["player1"] else "⭕"
+            current_symbol = "❌" if game["turn"] == game["player1"] else "⭕"
             
             if (i, j) in game.get("disabled_cells", []):
                 bot.answer_callback_query(call.id, "🔒 Эта клетка заблокирована!")
                 return
-            
             if game["board"][i][j] != "⬜":
                 bot.answer_callback_query(call.id, "❌ Клетка занята")
                 return
             
-            game["board"][i][j] = current_player
-            
+            game["board"][i][j] = current_symbol
             winner = check_winner(game["board"], game["size"])
             
             if winner == "❌":
@@ -5498,11 +5484,6 @@ def register_handlers():
             # Смена хода
             game["turn"] = game["player1"] if game["turn"] == game["player2"] else game["player2"]
             
-            # Погода
-            game["weather_counter"] += 1
-            if game["weather_counter"] % 5 == 0:
-                game["weather"] = get_random_weather()
-            
             weather_desc = WEATHER_EFFECTS[game["weather"]]["desc"]
             weather_emoji = WEATHER_EFFECTS[game["weather"]]["emoji"]
             markup = board_to_markup(game["board"], game_id, game["size"], game.get("disabled_cells", []))
@@ -5517,8 +5498,7 @@ def register_handlers():
             
             bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
             bot.answer_callback_query(call.id, "✅ Ход сделан")
-
-
+        
     # ========== АНТИССЫЛКА (УЛУЧШЕННАЯ) ==========
     import re
     import time
