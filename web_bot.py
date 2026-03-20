@@ -5160,12 +5160,12 @@ def register_handlers():
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
 
-    # ========== КРЕСТИКИ-НОЛИКИ 3.0 ==========
+    # ========== КРЕСТИКИ-НОЛИКИ ==========
     import random
     import time
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
-    # Хранилище игр
+    # Хранилища
     active_games = {}
     user_game = {}
     
@@ -5185,54 +5185,32 @@ def register_handlers():
             return random.choice(rare) if rare else "☀️ Солнечно"
         return random.choice([w for w in WEATHER if not WEATHER[w].get("rare")])
     
-    # ========== БОНУСЫ ==========
-    BONUSES = [
-        {"name": "🔄 Допход", "effect": "extra_turn"},
-        {"name": "🔒 Блок", "effect": "block"},
-        {"name": "👁️ Провидец", "effect": "see"}
-    ]
-    
-    def get_random_bonus():
-        return random.choice(BONUSES)
-    
     def create_board(size=5):
         return [["⬜" for _ in range(size)] for _ in range(size)]
     
-    def board_to_markup(board, game_id, size, disabled=None):
-        disabled = disabled or []
-        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+    def board_to_markup(board, game_id, size):
         markup = InlineKeyboardMarkup(row_width=size)
         for i in range(size):
             row = []
             for j in range(size):
                 cell = board[i][j]
-                if (i, j) in disabled:
-                    text = "🔒"
-                elif cell == "❌":
-                    text = "❌"
-                elif cell == "⭕":
-                    text = "⭕"
-                else:
-                    text = "⬜"
+                text = "❌" if cell == "❌" else "⭕" if cell == "⭕" else "⬜"
                 row.append(InlineKeyboardButton(text, callback_data=f"x0_{game_id}_{i}_{j}"))
             markup.add(*row)
         markup.add(InlineKeyboardButton("🔄 Сдаться", callback_data=f"x0_surrender_{game_id}"))
         return markup
     
     def check_winner(board, size):
-        # Проверка строк и столбцов
         for i in range(size):
             if all(board[i][j] == board[i][0] and board[i][0] != "⬜" for j in range(size)):
                 return board[i][0]
             if all(board[j][i] == board[0][i] and board[0][i] != "⬜" for j in range(size)):
                 return board[0][i]
-        # Проверка диагоналей
         if all(board[i][i] == board[0][0] and board[0][0] != "⬜" for i in range(size)):
             return board[0][0]
         if all(board[i][size-1-i] == board[0][size-1] and board[0][size-1] != "⬜" for i in range(size)):
             return board[0][size-1]
-        # Проверка ничьей
-        if all(board[i][j] != "⬜" for i in range(size) for j in range(size)):
+        if all(cell != "⬜" for row in board for cell in row):
             return "draw"
         return None
     
@@ -5242,39 +5220,23 @@ def register_handlers():
         chat_id = message.chat.id
     
         if user_id in user_game:
-            bot.reply_to(message, "❌ У тебя уже есть активная игра! Закончи её.")
+            bot.reply_to(message, "❌ У тебя уже есть активная игра")
             return
     
         target = None
-        # 1. Если ответ на сообщение
+        # 1. Ответ на сообщение
         if message.reply_to_message:
             target = message.reply_to_message.from_user
-        # 2. Если есть @username
+        # 2. Упоминание @username
         else:
             args = message.text.split()
             if len(args) > 1:
                 username = args[1].replace('@', '')
-                # Пробуем найти пользователя
                 try:
                     target = bot.get_chat(f"@{username}")
                 except:
-                    # Если не нашли по username, пробуем найти в общих чатах
-                    found = False
-                    for chat_id2, info in bot_chats.items():
-                        try:
-                            members = bot.get_chat_administrators(int(chat_id2))
-                            for member in members:
-                                if member.user.username and member.user.username.lower() == username.lower():
-                                    target = member.user
-                                    found = True
-                                    break
-                            if found:
-                                break
-                        except:
-                            continue
-                    if not found:
-                        bot.reply_to(message, f"❌ Пользователь @{username} не найден. Убедись, что он есть в общем чате с ботом.")
-                        return
+                    bot.reply_to(message, f"❌ Пользователь @{username} не найден")
+                    return
     
         # Игра с другом
         if target and str(target.id) != user_id and not target.is_bot:
@@ -5296,8 +5258,6 @@ def register_handlers():
                 "weather": weather,
                 "weather_counter": 0,
                 "disabled": [],
-                "bonus": None,
-                "bonus_used": False,
                 "status": "waiting",
                 "chat_id": chat_id,
                 "msg_id": None
@@ -5340,8 +5300,6 @@ def register_handlers():
             "weather": weather,
             "weather_counter": 0,
             "disabled": [],
-            "bonus": None,
-            "bonus_used": False,
             "status": "active",
             "chat_id": chat_id
         }
@@ -5360,6 +5318,7 @@ def register_handlers():
     @bot.callback_query_handler(func=lambda call: call.data.startswith('x0_'))
     def x0_callback(call):
         try:
+            # Разбираем callback_data: x0_action_gameid_координаты
             parts = call.data.split('_')
             action = parts[1]
             game_id = parts[2]
@@ -5460,16 +5419,9 @@ def register_handlers():
                     bot.answer_callback_query(call.id, "Игра завершена")
                     return
     
-                # Погодные эффекты
-                game["weather_counter"] += 1
-                if game["weather_counter"] % 5 == 0:
-                    game["weather"] = get_random_weather()
-                    bot.send_message(game["chat_id"], f"🌤️ Погода изменилась: {game['weather']}!")
-    
                 # Смена хода
                 game["turn"] = game["p2"] if game["turn"] == game["p1"] else game["p1"]
-    
-                markup = board_to_markup(game["board"], game_id, game["size"], game["disabled"])
+                markup = board_to_markup(game["board"], game_id, game["size"])
                 next_player = game["turn"]
                 next_symbol = "❌" if next_player == game["p1"] else "⭕"
     
@@ -5484,7 +5436,6 @@ def register_handlers():
         except Exception as e:
             print(f"❌ Ошибка в callback: {e}")
             bot.answer_callback_query(call.id, "❌ Ошибка")
-
 
                 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
