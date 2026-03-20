@@ -5160,7 +5160,7 @@ def register_handlers():
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
 
-    # ========== КРЕСТИКИ-НОЛИКИ (С ОТЛАДКОЙ) ==========
+# ========== КРЕСТИКИ-НОЛИКИ ==========
     import random
     import time
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -5193,13 +5193,13 @@ def register_handlers():
             return board[0][0]
         if board[0][2] == board[1][1] == board[2][0] != "⬜":
             return board[0][2]
-        if all(board[i][j] != "⬜" for i in range(3) for j in range(3)):
+        if all(cell != "⬜" for row in board for cell in row):
             return "draw"
         return None
     
     @bot.message_handler(commands=['x0'])
     def cmd_x0(message):
-        user_id = message.from_user.id
+        user_id = str(message.from_user.id)
         chat_id = message.chat.id
     
         if user_id in players:
@@ -5219,8 +5219,8 @@ def register_handlers():
                     bot.reply_to(message, f"❌ Пользователь @{username} не найден")
                     return
     
-        if target and target.id != user_id and not target.is_bot:
-            if target.id in players:
+        if target and str(target.id) != user_id and not target.is_bot:
+            if str(target.id) in players:
                 bot.reply_to(message, f"❌ {target.first_name} уже в игре")
                 return
     
@@ -5228,7 +5228,7 @@ def register_handlers():
             game = {
                 "id": game_id,
                 "p1": user_id,
-                "p2": target.id,
+                "p2": str(target.id),
                 "board": create_board(),
                 "turn": user_id,
                 "status": "waiting",
@@ -5237,10 +5237,7 @@ def register_handlers():
             }
             games[game_id] = game
             players[user_id] = game_id
-            players[target.id] = game_id
-    
-            print(f"✅ Игра создана: {game_id}")
-            print(f"📦 games: {list(games.keys())}")
+            players[str(target.id)] = game_id
     
             markup = InlineKeyboardMarkup()
             markup.add(
@@ -5271,105 +5268,121 @@ def register_handlers():
         players[user_id] = game_id
     
         markup = board_to_markup(game["board"], game_id)
-        bot.reply_to(message, "🎮 Крестики-нолики\n❌ Твой ход", reply_markup=markup)
+        bot.reply_to(message, "🎮 **Крестики-нолики**\n❌ Твой ход", parse_mode="Markdown", reply_markup=markup)
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith('ttt_'))
     def ttt_callback(call):
-        data = call.data.split('_')
-        action = data[1]
-        game_id = data[2]
-    
-        print(f"🔍 Callback: action={action}, game_id={game_id}")
-        print(f"🔍 games keys: {list(games.keys())}")
-    
-        game = games.get(game_id)
-        if not game:
-            bot.answer_callback_query(call.id, f"❌ Игра не найдена. game_id={game_id}")
-            return
-    
-        if action == "accept":
-            if game["status"] != "waiting":
-                bot.answer_callback_query(call.id, "❌ Вызов уже обработан")
+        try:
+            parts = call.data.split('_', 2)
+            if len(parts) < 3:
+                bot.answer_callback_query(call.id, "❌ Неверный формат")
                 return
-            if call.from_user.id != game["p2"]:
-                bot.answer_callback_query(call.id, "❌ Это не твой вызов")
+            action = parts[1]
+            game_id = parts[2]
+    
+            game = games.get(game_id)
+            if not game:
+                bot.answer_callback_query(call.id, "❌ Игра не найдена")
                 return
     
-            game["status"] = "active"
-            markup = board_to_markup(game["board"], game_id)
-            text = f"🎮 Крестики-нолики\n❌ Ход **{game['p1']}**"
-            bot.edit_message_text(text, chat_id=game["chat_id"], message_id=game["msg_id"], reply_markup=markup, parse_mode="Markdown")
-            bot.answer_callback_query(call.id, "🎮 Игра началась!")
-            return
+            # Принять вызов
+            if action == "accept":
+                if game["status"] != "waiting":
+                    bot.answer_callback_query(call.id, "❌ Вызов уже обработан")
+                    return
+                if str(call.from_user.id) != game["p2"]:
+                    bot.answer_callback_query(call.id, "❌ Это не твой вызов")
+                    return
     
-        if action == "decline":
-            if call.from_user.id != game["p2"]:
-                bot.answer_callback_query(call.id, "❌ Это не твой вызов")
-                return
-            bot.edit_message_text(f"❌ {call.from_user.first_name} отказался.", chat_id=game["chat_id"], message_id=game["msg_id"])
-            bot.send_message(game["p1"], f"❌ {call.from_user.first_name} отказался.")
-            for uid in [game["p1"], game["p2"]]:
-                players.pop(uid, None)
-            games.pop(game_id, None)
-            bot.answer_callback_query(call.id, "Вызов отклонён")
-            return
-    
-        if action == "surrender":
-            if game["status"] != "active":
-                bot.answer_callback_query(call.id, "❌ Игра уже завершена")
-                return
-            if call.from_user.id not in [game["p1"], game["p2"]]:
-                bot.answer_callback_query(call.id, "❌ Ты не участник")
+                game["status"] = "active"
+                markup = board_to_markup(game["board"], game_id)
+                text = f"🎮 **Крестики-нолики**\n❌ Ход **{game['p1']}**"
+                bot.edit_message_text(text, chat_id=game["chat_id"], message_id=game["msg_id"], reply_markup=markup, parse_mode="Markdown")
+                bot.answer_callback_query(call.id, "🎮 Игра началась!")
                 return
     
-            winner = game["p1"] if call.from_user.id == game["p2"] else game["p2"]
-            text = f"🏳️ {call.from_user.first_name} сдаётся!\n\n🏆 Победитель: {winner}"
-            bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
-            bot.send_message(winner, f"🏆 Твой соперник сдался!")
-            for uid in [game["p1"], game["p2"]]:
-                players.pop(uid, None)
-            games.pop(game_id, None)
-            bot.answer_callback_query(call.id, "Игра завершена")
-            return
-    
-        if action == "move":
-            if game["status"] != "active":
-                bot.answer_callback_query(call.id, "❌ Игра уже завершена")
-                return
-            if call.from_user.id != game["turn"]:
-                bot.answer_callback_query(call.id, "❌ Сейчас не твой ход")
+            # Отказаться
+            if action == "decline":
+                if str(call.from_user.id) != game["p2"]:
+                    bot.answer_callback_query(call.id, "❌ Это не твой вызов")
+                    return
+                bot.edit_message_text(f"❌ {call.from_user.first_name} отказался.", chat_id=game["chat_id"], message_id=game["msg_id"])
+                bot.send_message(game["p1"], f"❌ {call.from_user.first_name} отказался.")
+                for uid in [game["p1"], game["p2"]]:
+                    players.pop(uid, None)
+                games.pop(game_id, None)
+                bot.answer_callback_query(call.id, "Вызов отклонён")
                 return
     
-            i, j = int(data[3]), int(data[4])
-            symbol = "❌" if game["turn"] == game["p1"] else "⭕"
+            # Сдаться
+            if action == "surrender":
+                if game["status"] != "active":
+                    bot.answer_callback_query(call.id, "❌ Игра уже завершена")
+                    return
+                if str(call.from_user.id) not in [game["p1"], game["p2"]]:
+                    bot.answer_callback_query(call.id, "❌ Ты не участник")
+                    return
     
-            if game["board"][i][j] != "⬜":
-                bot.answer_callback_query(call.id, "❌ Клетка занята")
-                return
-    
-            game["board"][i][j] = symbol
-            winner = check_winner(game["board"])
-    
-            if winner:
-                if winner == "draw":
-                    text = "🤝 НИЧЬЯ!"
-                else:
-                    text = f"🎉 ПОБЕДА!\n\n🏆 Победил {winner}"
+                winner = game["p1"] if str(call.from_user.id) == game["p2"] else game["p2"]
+                text = f"🏳️ **{call.from_user.first_name} сдаётся!**\n\n🏆 Победитель: {winner}"
                 bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
+                bot.send_message(winner, f"🏆 Твой соперник сдался!")
                 for uid in [game["p1"], game["p2"]]:
                     players.pop(uid, None)
                 games.pop(game_id, None)
                 bot.answer_callback_query(call.id, "Игра завершена")
                 return
     
-            game["turn"] = game["p2"] if game["turn"] == game["p1"] else game["p1"]
-            markup = board_to_markup(game["board"], game_id)
-            next_player = game["turn"]
-            next_symbol = "❌" if next_player == game["p1"] else "⭕"
-            text = f"🎮 Крестики-нолики\n{next_symbol} Ход **{next_player}**"
-            bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-            bot.answer_callback_query(call.id, "✅ Ход сделан")
-
+            # Ход
+            if action == "move":
+                if game["status"] != "active":
+                    bot.answer_callback_query(call.id, "❌ Игра уже завершена")
+                    return
+                if str(call.from_user.id) != game["turn"]:
+                    bot.answer_callback_query(call.id, "❌ Сейчас не твой ход")
+                    return
+    
+                # Получаем координаты из callback_data
+                # parts = ['ttt', 'move', game_id, i, j]
+                coords = call.data.split('_')
+                if len(coords) < 5:
+                    bot.answer_callback_query(call.id, "❌ Ошибка координат")
+                    return
+                i, j = int(coords[3]), int(coords[4])
+    
+                symbol = "❌" if game["turn"] == game["p1"] else "⭕"
+    
+                if game["board"][i][j] != "⬜":
+                    bot.answer_callback_query(call.id, "❌ Клетка занята")
+                    return
+    
+                game["board"][i][j] = symbol
+                winner = check_winner(game["board"])
+    
+                if winner:
+                    if winner == "draw":
+                        text = "🤝 **НИЧЬЯ!**"
+                    else:
+                        text = f"🎉 **ПОБЕДА!**\n\n🏆 Победил {winner}"
+                    bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
+                    for uid in [game["p1"], game["p2"]]:
+                        players.pop(uid, None)
+                    games.pop(game_id, None)
+                    bot.answer_callback_query(call.id, "Игра завершена")
+                    return
+    
+                # Смена хода
+                game["turn"] = game["p2"] if game["turn"] == game["p1"] else game["p1"]
+                markup = board_to_markup(game["board"], game_id)
+                next_player = game["turn"]
+                next_symbol = "❌" if next_player == game["p1"] else "⭕"
+                text = f"🎮 **Крестики-нолики**\n{next_symbol} Ход **{next_player}**"
+                bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+                bot.answer_callback_query(call.id, "✅ Ход сделан")
+    
+        except Exception as e:
+            print(f"❌ Ошибка в callback: {e}")
+            bot.answer_callback_query(call.id, "❌ Ошибка")
 
                 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
