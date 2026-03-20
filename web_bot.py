@@ -5293,21 +5293,50 @@ def register_handlers():
             args = message.text.split()
             if len(args) > 1:
                 username = args[1].replace('@', '')
-                # Упрощённо: ищем по username (можно доработать)
-                target = None
+                try:
+                    # Пытаемся найти пользователя по username через Telegram API
+                    target = bot.get_chat(f"@{username}")
+                except:
+                    bot.reply_to(message, f"❌ Пользователь @{username} не найден")
+                    return
         
         if not target or target.id == user_id:
-            bot.reply_to(message, "❓ Используй:\n"
-                                  "`/x0` — игра с ботом\n"
-                                  "`/x0 @username` — вызвать друга\n"
-                                  "или ответь на сообщение `/x0`", parse_mode="Markdown")
+            # Игра с ботом
+            game_id = f"x0_bot_{user_id}_{int(time.time())}"
+            size = 5
+            weather = get_random_weather()
+            
+            game = {
+                "id": game_id,
+                "player1": user_id,
+                "player2": "bot",
+                "board": create_board(size),
+                "size": size,
+                "turn": user_id,
+                "weather": weather,
+                "weather_counter": 0,
+                "disabled_cells": [],
+                "status": "active"
+            }
+            active_games[game_id] = game
+            
+            weather_desc = WEATHER_EFFECTS[weather]["desc"]
+            weather_emoji = WEATHER_EFFECTS[weather]["emoji"]
+            markup = board_to_markup(game["board"], game_id, size)
+            
+            text = f"🎮 **Крестики-нолики {size}x{size}**\n"
+            text += f"{weather_emoji} Погода: **{weather}**\n"
+            text += f"📖 {weather_desc}\n\n"
+            text += f"❌ Ваш ход (крестики)"
+            
+            bot.reply_to(message, text, parse_mode="Markdown", reply_markup=markup)
             return
         
         if target.is_bot:
             bot.reply_to(message, "🤖 С ботами играй через `/x0` без указания")
             return
         
-        # Вызов друга
+        # Вызов друга (существующий код)
         game_id = f"x0_{user_id}_{target.id}_{int(time.time())}"
         size = 5
         weather = get_random_weather()
@@ -5323,8 +5352,6 @@ def register_handlers():
             "weather": weather,
             "weather_counter": 0,
             "disabled_cells": [],
-            "bonus": None,
-            "bonus_used": False,
             "status": "waiting"
         }
         
@@ -5347,6 +5374,7 @@ def register_handlers():
         )
         
         bot.reply_to(message, f"⚔️ Вызов отправлен {target.first_name}!")
+
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith('x0_'))
     def x0_callback(call):
