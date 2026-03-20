@@ -4000,7 +4000,7 @@ def register_handlers():
         bot.reply_to(message, f"🪐 {text}")
     
     # ========== КОНЕЦ МЕГАБЛОКА ==========
-    # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (С АВТОЭМОДЗИ) ==========
+    # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (С КАТЕГОРИЯМИ) ==========
     @bot.message_handler(commands=['holidays'])
     def cmd_holidays(message):
         try:
@@ -4009,229 +4009,149 @@ def register_handlers():
             from datetime import datetime
             import random
     
-            status_msg = bot.reply_to(message, "🔍 Ищу все праздники на сегодня...")
+            status_msg = bot.reply_to(message, "🔍 Собираю все праздники на сегодня...")
     
             today = datetime.now()
             all_holidays = []
-            errors = []
     
-            # === СЛОВАРЬ ЭМОДЗИ ПО КЛЮЧЕВЫМ СЛОВАМ ===
-            EMOJI_MAP = {
-                # Животные
-                'кошек': '🐱', 'кота': '🐱', 'котов': '🐱', 'кошки': '🐱',
-                'собак': '🐶', 'псов': '🐶', 'собаки': '🐶',
-                'птиц': '🐦', 'птицы': '🐦',
-                'лошади': '🐴', 'коня': '🐴', 'лошадей': '🐴',
-                'медвед': '🐻', 'мишек': '🐻',
-                'лис': '🦊', 'лисы': '🦊',
-                'волк': '🐺', 'волка': '🐺',
-                'зайц': '🐰', 'кролик': '🐰',
-                'белк': '🐿️',
-                'ежей': '🦔', 'ежа': '🦔',
-                'кит': '🐋', 'китов': '🐋',
-                'дельфин': '🐬',
-                'слон': '🐘', 'слона': '🐘',
-                'жираф': '🦒',
-                'кенгуру': '🦘',
-                'осьминог': '🐙',
-                'рыб': '🐟', 'рыбы': '🐟',
-                'бабочк': '🦋',
-                'пчел': '🐝', 'пчёлы': '🐝',
-                'божьей коровк': '🐞',
-    
-                # Природа
-                'земли': '🌍', 'планеты': '🌍',
-                'воды': '💧', 'моря': '🌊',
-                'леса': '🌲', 'деревьев': '🌳',
-                'цветов': '🌸', 'цветы': '🌸',
-                'роз': '🌹', 'розы': '🌹',
-                'солнц': '☀️',
-                'луны': '🌙', 'луна': '🌙',
-                'звезд': '⭐', 'звёзд': '⭐',
-                'ветра': '💨',
-                'огня': '🔥', 'пламени': '🔥',
-                'гор': '🏔️', 'вершин': '⛰️',
-    
-                # Еда
-                'хлеб': '🍞', 'хлеба': '🍞',
-                'молок': '🥛',
-                'сыр': '🧀', 'сыра': '🧀',
-                'фрукт': '🍎', 'фруктов': '🍎',
-                'яблок': '🍎', 'яблоч': '🍎',
-                'виноград': '🍇',
-                'арбуз': '🍉',
-                'дын': '🍈',
-                'лимон': '🍋',
-                'банан': '🍌',
-                'ананас': '🍍',
-                'кокос': '🥥',
-                'манго': '🥭',
-                'пицц': '🍕',
-                'бургер': '🍔',
-                'пирог': '🥧', 'пирога': '🥧',
-                'торт': '🎂', 'торта': '🎂',
-                'морожен': '🍦',
-                'шоколад': '🍫',
-                'конфет': '🍬', 'конфеты': '🍬',
-                'чай': '🍵', 'чая': '🍵',
-                'кофе': '☕', 'кофе': '☕',
-                'пив': '🍺', 'пива': '🍺',
-                'вин': '🍷', 'вина': '🍷',
-                'водк': '🥃', 'водки': '🥃',
-    
-                # Праздники и люди
-                'новый год': '🎄',
-                'рождество': '🎅',
-                'пасх': '🥚',
-                'хэллоуин': '🎃',
-                'святого валентина': '❤️',
-                'женский': '🌷',
-                'защитника': '🎖️',
-                'победы': '🎗️',
-                'смеха': '😄',
-                'знаний': '📚',
-                'учител': '👩‍🏫',
-                'врач': '👩‍⚕️',
-                'медсестр': '👩‍⚕️',
-                'стоматолог': '🦷',
-                'поэзии': '📜',
-                'танц': '💃',
-                'музык': '🎵',
-                'театр': '🎭',
-                'кино': '🎬',
-                'смеха': '😂',
-    
-                # Эмоции и состояния
-                'счасть': '😊',
-                'любв': '❤️', 'любовь': '❤️',
-                'дружб': '🤝',
-                'объятий': '🫂',
-                'поцелу': '💋',
-                'матери': '👩‍👧',
-                'отца': '👨‍👧',
-                'ребенк': '👶', 'детей': '👶',
-                'бабушк': '👵',
-                'дедушк': '👴',
-    
-                # Профессии
-                'программист': '👨‍💻',
-                'учител': '👩‍🏫',
-                'строител': '👷',
-                'пожарн': '🚒',
-                'полиц': '👮',
-                'врач': '👩‍⚕️',
-                'медсестр': '👩‍⚕️',
-                'лётчик': '✈️',
-                'космонавт': '🚀',
-                'моряк': '⚓',
-                'рыбак': '🎣',
-                'повар': '👨‍🍳',
-                'художник': '🎨',
-                'писател': '✍️',
-                'журналист': '📰',
-                'библиотекар': '📚',
-                'архитектор': '🏛️',
-                'дизайнер': '🎨',
-            }
-    
-            # === ФУНКЦИЯ ПОДБОРА ЭМОДЗИ ===
-            def get_emoji_for_holiday(holiday_name):
-                holiday_lower = holiday_name.lower()
-                for keyword, emoji in EMOJI_MAP.items():
-                    if keyword in holiday_lower:
-                        return emoji
-                # Если не нашли — возвращаем случайный
-                fallback_emojis = ["🎉", "🎊", "✨", "🌟", "⭐", "🪄", "🎈", "🏆"]
-                return random.choice(fallback_emojis)
-    
-            # === ИСТОЧНИКИ (такие же, как в прошлой версии) ===
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            
-            # calend.ru
+            # === ИСТОЧНИК 1: calend.ru ===
             try:
                 url = "https://calend.ru"
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
                 resp = requests.get(url, headers=headers, timeout=7)
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, 'html.parser')
-                    for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'li', 'span']):
-                        text = tag.get_text(strip=True)
-                        if text and 5 < len(text) < 120:
-                            if 'день' in text.lower() or 'праздник' in text.lower():
-                                if not any(x in text.lower() for x in ['меню', 'главная', 'сегодня', 'завтра', 'календарь', '2026']):
-                                    all_holidays.append(text)
-            except Exception as e:
-                errors.append(f"calend.ru: {e}")
-    
-            # my-calend.ru
-            try:
-                url = "https://my-calend.ru"
-                resp = requests.get(url, headers=headers, timeout=7)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    for tag in soup.find_all(['li', 'span']):
-                        text = tag.get_text(strip=True)
+                    for block in soup.find_all(['li', 'span', 'a']):
+                        text = block.get_text(strip=True)
                         if text and 5 < len(text) < 100:
-                            if 'день' in text.lower():
-                                if 'сегодня' not in text.lower():
-                                    all_holidays.append(text)
+                            trash_words = ['сегодня', 'завтра', 'послезавтра', 'февраль', 'март', 'апрель', 
+                                         'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 
+                                         'воскресенье', 'меню', 'главная', 'календарь', 'праздники', 'именины',
+                                         'народный', 'хроника', 'компании', 'персоны', 'лунный', 'производственные',
+                                         '2026', '2027', '2025']
+                            
+                            if any(word in text.lower() for word in ['день', 'праздник', 'год', 'международный']):
+                                if not any(trash in text.lower() for trash in trash_words):
+                                    if text not in all_holidays:
+                                        all_holidays.append(text)
             except Exception as e:
-                errors.append(f"my-calend.ru: {e}")
+                print(f"Ошибка calend.ru: {e}")
     
-            # kakoysegodnyaprazdnik.ru
+            # === ИСТОЧНИК 2: kakoysegodnyaprazdnik.ru ===
             try:
                 url = "https://kakoysegodnyaprazdnik.ru"
                 resp = requests.get(url, headers=headers, timeout=7)
                 if resp.status_code == 200:
                     soup = BeautifulSoup(resp.text, 'html.parser')
+                    
                     for tag in soup.find_all(['h1', 'h2', 'h3', 'span']):
                         text = tag.get_text(strip=True)
                         if text and 5 < len(text) < 100:
-                            if 'день' in text.lower() or 'праздник' in text.lower():
-                                if not any(x in text.lower() for x in ['сегодня', 'завтра', 'меню']):
-                                    all_holidays.append(text)
+                            if not any(word in text.lower() for word in ['сегодня', 'завтра', 'послезавтра', 'меню']):
+                                if any(word in text.lower() for word in ['день', 'праздник']):
+                                    if text not in all_holidays:
+                                        all_holidays.append(text)
             except Exception as e:
-                errors.append(f"kakoysegodnyaprazdnik.ru: {e}")
+                print(f"Ошибка kakoysegodnyaprazdnik.ru: {e}")
     
-            # === ОЧИСТКА ===
-            clean = []
+            # === ФИНАЛЬНАЯ ОЧИСТКА ===
+            clean_holidays = []
             for h in all_holidays:
                 h = h.replace(' ', ' ').strip()
-                if len(h) < 8:
+                if len(h) < 5:
                     continue
-                if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения', 'именины']):
+                if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения']):
                     continue
-                if h not in clean:
-                    clean.append(h)
+                if h not in clean_holidays:
+                    clean_holidays.append(h)
+    
+            # === КАТЕГОРИЗАЦИЯ ПРАЗДНИКОВ ===
+            
+            # Ключевые слова для каждой категории
+            categories = {
+                'гастрономические': ['пицц', 'бургер', 'шоколад', 'конфет', 'торт', 'пирог', 'морожен', 'кофе', 'чай', 'пив', 'вин', 'водк', 'коктейль', 'еда', 'продукт', 'хлеб', 'молок', 'сыр', 'фрукт', 'яблок', 'арбуз', 'дын', 'лимон', 'банан'],
+                'культурные': ['кино', 'фильм', 'театр', 'музык', 'танец', 'песн', 'худож', 'книг', 'поэзи', 'писател', 'актер', 'режиссер'],
+                'профессиональные': ['программист', 'учител', 'врач', 'строител', 'воен', 'лётчик', 'космонавт', 'моряк', 'пожарн', 'полиц', 'медсестр', 'стоматолог', 'бухгалтер', 'менеджер', 'юрист', 'адвокат'],'душевные': ['матер', 'отц', 'ребенк', 'детей', 'семь', 'любов', 'святого валентина', 'свадьб', 'бабушк', 'дедушк', 'доч', 'сын'],
+                'глобальные': ['международный', 'всемирный', 'мировой', 'планет', 'земл', 'оон'],
+                'национальные': ['россии', 'рф', 'отечеств', 'русский', 'народа', 'славян'],
+                'духовные': ['пасх', 'рождеств', 'крещен', 'троиц', 'маслениц', 'православн', 'церковн', 'свят', 'иконы'],
+                'вайбовые': ['счасть', 'улыбк', 'смех', 'добр', 'объят', 'поцелу', 'настроен', 'радост', 'уют', 'лени', 'мечта']
+            }
+            
+            # Распределяем праздники по категориям
+            categorized = {cat: [] for cat in categories}
+            categorized['другие'] = []
+            
+            for holiday in clean_holidays:
+                holiday_lower = holiday.lower()
+                assigned = False
+                
+                for cat, keywords in categories.items():
+                    if any(keyword in holiday_lower for keyword in keywords):
+                        categorized[cat].append(holiday)
+                        assigned = True
+                        break
+                
+                if not assigned:
+                    categorized['другие'].append(holiday)
+    
+            # === БОЛЬШЕ СМАЙЛОВ ДЛЯ КАЖДОЙ КАТЕГОРИИ ===
+            cat_emojis_pool = {
+                'гастрономические': ['🍔', '🍕', '🍣', '🍦', '🍩', '🍪', '🍫', '🍬', '🍭', '🍮', '🍯', '🥨', '🥐', '🥖', '🧀', '🥚', '🍳', '🥓', '🥩', '🍗', '🍖', '🌭', '🥪', '🥙', '🧆'],
+                'культурные': ['🎬', '🎭', '🎨', '🎤', '🎧', '🎸', '🥁', '🎻', '🎺', '📚', '📖', '🎥', '📽️', '🎟️', '🎫', '🏛️', '🖼️'],
+                'профессиональные': ['👔', '👩‍💻', '👨‍💻', '👩‍⚕️', '👨‍⚕️', '👩‍🏫', '👨‍🏫', '👩‍🚒', '👨‍🚒', '👩‍✈️', '👨‍✈️', '👩‍⚖️', '👨‍⚖️', '🔧', '⚒️', '🛠️', '💼'],
+                'душевные': ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '🕊️'],
+                'глобальные': ['🌍', '🌎', '🌏', '🌐', '🗺️', '🧭', '🌋', '🏔️', '⛰️', '🏝️', '🏜️', '🏖️', '🌅', '🌄'],
+                'национальные': ['🇷🇺', '🇺🇸', '🇬🇧', '🇫🇷', '🇩🇪', '🇮🇹', '🇪🇸', '🇯🇵', '🇨🇳', '🇮🇳', '🇧🇷', '🇦🇺', '🏴󠁧󠁢󠁥󠁮󠁧󠁿'],
+                'духовные': ['🙏', '🕯️', '✝️', '☦️', '☪️', '🕉️', '☸️', '✡️', '🪯', '🔯', '🛐', '⛪', '🕌', '🕍', '🛕', '⛩️', '🕋'],
+                'вайбовые': ['🌊', '✨', '🌟', '⭐', '☀️', '🌈', '🌙', '🌌', '🌠', '🎆', '🎇', '🧘', '🫂', '🤗', '😊', '🥰'],
+                'другие': ['📌', '🔹', '🔸', '▪️', '▫️', '🔶', '🔷', '✅', '✔️', '🎯']
+            }
+            
+            # Названия категорий
+            cat_names = {
+                'гастрономические': 'Вкусные',
+                'культурные': 'Культурные',
+                'профессиональные': 'Профессиональные',
+                'душевные': 'Душевные',
+                'глобальные': 'Глобальные',
+                'национальные': 'Национальные',
+                'духовные': 'Духовные',
+                'вайбовые': 'Вайбовые',
+                'другие': 'Ещё'
+            }
+    
+            # === ФОРМИРУЕМ КРАСИВЫЙ ОТВЕТ ===
+            result = f"🎉 Праздники на {today.strftime('%d %B')}\n\n"
+            
+            # Собираем вывод с рандомными эмодзи из пула
+            for cat, holidays_list in categorized.items():
+                if holidays_list:
+                    # Выбираем случайный эмодзи из пула категории
+                    emoji = random.choice(cat_emojis_pool[cat])
+                    result += f"{emoji} {cat_names[cat]}\n"
+                    for h in holidays_list[:5]:
+                        result += f"  • {h}\n"
+                    if len(holidays_list) > 5:
+                        result += f"  ... и ещё {len(holidays_list)-5}\n"
+                    result += "\n"
+            
+            result += f"✨ Всего сегодня: {len(clean_holidays)} праздников"
     
             # === ЕСЛИ НИЧЕГО НЕ НАШЛИ ===
-            if not clean:
-                error_text = "😕 Не удалось найти праздники."
-                if errors:
-                    error_text += f"\n\nОшибки: {', '.join(errors[:3])}"
-                bot.edit_message_text(error_text,
+            if not clean_holidays:
+                bot.edit_message_text("😕 Не удалось найти праздники. Попробуй позже.",
                                      chat_id=status_msg.chat.id,
                                      message_id=status_msg.message_id)
                 return
-                # === ОТВЕТ С УМНЫМИ ЭМОДЗИ ===
-            random.shuffle(clean)
-            result = f"🎉 Праздники на {today.strftime('%d %B %Y')}:\n\n"
-            for h in clean[:30]:
-                emoji = get_emoji_for_holiday(h)
-                result += f"{emoji} {h}\n"
-            result += f"\n✨ Всего найдено: {len(clean)}"
-    
             bot.edit_message_text(result,
-                                 chat_id=status_msg.chat.id,
-                                 message_id=status_msg.message_id,
-                                 parse_mode="Markdown")
-    
-            if errors:
-                print(f"Ошибки при парсинге: {errors}")
-    
-        except Exception as e:
-            bot.reply_to(message, f"❌ Критическая ошибка: {e}")
-            print(f"Ошибка в /holidays: {e}")
-    # ========== КОНЕЦ /holidays ==========
+                                         chat_id=status_msg.chat.id,
+                                         message_id=status_msg.message_id,
+                                         parse_mode="Markdown")
+            
+                except Exception as e:
+                    bot.reply_to(message, f"❌ Ошибка: {e}")
+
     # ========== РЕВИЖН — ЕГО СУТЬ ==========
     REVISION_PERSONALITY_FILE = "revision_personality.json"
     
@@ -4961,13 +4881,86 @@ def register_handlers():
         # --- Отправка ---
         await update.message.reply_text(text, parse_mode='HTML')
 
-    # ========== УЛУЧШЕННЫЕ КВЕСТЫ ==========
+    # ========== КВЕСТЫ (РАБОЧАЯ ВЕРСИЯ) ==========
+    STORY_FILE = "story_states.json"
+    GROUP_STORY_FILE = "group_story.json"
+    
+    def load_stories():
+        if os.path.exists(STORY_FILE):
+            try:
+                with open(STORY_FILE, "r") as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+    
+    def save_stories(stories):
+        try:
+            with open(STORY_FILE, "w") as f:
+                json.dump(stories, f, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения историй: {e}")
+    
+    def load_group_story(chat_id):
+        if os.path.exists(GROUP_STORY_FILE):
+            try:
+                with open(GROUP_STORY_FILE, "r") as f:
+                    data = json.load(f)
+                    return data.get(str(chat_id), "")
+            except:
+                return ""
+        return ""
+    
+    def save_group_story(chat_id, story):
+        data = {}
+        if os.path.exists(GROUP_STORY_FILE):
+            try:
+                with open(GROUP_STORY_FILE, "r") as f:
+                    data = json.load(f)
+            except:
+                pass
+        data[str(chat_id)] = story
+        try:
+            with open(GROUP_STORY_FILE, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения групповой истории: {e}")
+    
+    user_stories = load_stories()
+    
+    def ask_g4f(prompt, context=""):
+        """Отправляет запрос к g4f и возвращает ответ"""
+        try:
+            from g4f import ChatCompletion
+            
+            full_prompt = f"{context}\n\n{prompt}" if context else prompt
+            
+            models_to_try = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku", "gemini-pro"]
+            answer = None
+            
+            for model in models_to_try:
+                try:
+                    response = ChatCompletion.create(
+                        model=model,
+                        messages=[{"role": "user", "content": full_prompt}],
+                        timeout=15
+                    )
+                    if response:
+                        answer = response
+                        break
+                except:
+                    continue
+            
+            return answer if answer else "❌ Не удалось получить ответ."
+        except Exception as e:
+            return f"❌ Ошибка: {e}"
+    
     @bot.message_handler(commands=['quest'])
     def cmd_quest(message):
         user_id = str(message.from_user.id)
-        text = message.text.replace('/quest', '', 1).strip().lower()
+        text = message.text.replace('/quest', '', 1).strip()
     
-        # Если просто "quest" без текста — показываем справку
+        # Если просто /quest без текста — показываем справку
         if not text:
             bot.reply_to(message, "❓ Используй:\n"
                                   "/quest начать — случайный квест\n"
@@ -4976,7 +4969,7 @@ def register_handlers():
             return
     
         # Сброс квеста
-        if text == 'сброс' or text == 'reset':
+        if text.lower() in ['сброс', 'reset']:
             if user_id in user_stories:
                 del user_stories[user_id]
                 save_stories(user_stories)
@@ -4986,29 +4979,64 @@ def register_handlers():
             return
     
         # Если пользователь пишет "начать" — генерируем случайный квест
-        if text == 'начать' or text == 'start':
-            start_prompt = "Начни новую историю. Игрок просыпается в загадочном месте. Опиши обстановку одним-двумя предложениями."
-            response = ask_yandex_gpt(start_prompt, "")
+        if text.lower() in ['начать', 'start']:
+            start_prompt = "Начни новую историю. Игрок просыпается в загадочном месте. Опиши обстановку двумя-тремя предложениями. Добавь интригу."
+            response = ask_g4f(start_prompt)
             user_stories[user_id] = response
             save_stories(user_stories)
-            bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}")
+            bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}", parse_mode="Markdown")
             return
     
         # Если есть активный квест — продолжаем
         if user_id in user_stories:
             context = user_stories[user_id]
-            response = ask_yandex_gpt(text, context)
-            user_stories[user_id] = context + "\n" + text + "\n" + response
+            prompt = f"Ты продолжаешь историю. Игрок пишет: {text}. Продолжи сюжет, опиши, что происходит дальше."
+            response = ask_g4f(prompt, context)
+            user_stories[user_id] = context + "\n\n" + response
             save_stories(user_stories)
-            bot.reply_to(message, f"📖 ...\n\n{response}")
+            bot.reply_to(message, f"📖 ...\n\n{response}", parse_mode="Markdown")
             return
-    
-        # Если квеста нет — начинаем новый с текстом пользователя
+    # Если квеста нет — начинаем новый с текстом пользователя
         start_prompt = f"Начни новую историю с такого начала: {text}"
-        response = ask_yandex_gpt(start_prompt, "")
+        response = ask_g4f(start_prompt)
         user_stories[user_id] = response
         save_stories(user_stories)
-        bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}")    
+        bot.reply_to(message, f"🌌 Твоя история начинается...\n\n{response}", parse_mode="Markdown")
+    
+    @bot.message_handler(commands=['groupquest'])
+    def cmd_groupquest(message):
+        chat_id = str(message.chat.id)
+        text = message.text.replace('/groupquest', '', 1).strip()
+    
+        if not text:
+            bot.reply_to(message, "❓ Используй:\n"
+                                  "/groupquest начать — начать общую историю\n"
+                                  "/groupquest действие — продолжить\n"
+                                  "/groupquest сброс — сбросить")
+            return
+    
+        if text.lower() in ['сброс', 'reset']:
+            save_group_story(chat_id, "")
+            bot.reply_to(message, "✅ Групповая история сброшена.")
+            return
+    
+        if text.lower() in ['начать', 'start']:
+            start_prompt = "Начни новую групповую историю. Несколько героев собираются вместе. Опиши место и ситуацию."
+            response = ask_g4f(start_prompt)
+            save_group_story(chat_id, response)
+            bot.reply_to(message, f"🌍 Общая история начинается...\n\n{response}", parse_mode="Markdown")
+            return
+    
+        context = load_group_story(chat_id)
+        if not context:
+            bot.reply_to(message, "❌ Сначала начни общую историю: /groupquest начать")
+            return
+    
+        prompt = f"Ты продолжаешь общую историю. Участник пишет: {text}. Продолжи сюжет."
+        response = ask_g4f(prompt, context)
+        new_context = context + "\n\n" + response
+        save_group_story(chat_id, new_context)
+        bot.reply_to(message, f"📜 ...\n\n{response}", parse_mode="Markdown")
     # ========== ИИ-ЧАТ (ВОПРОСЫ) ==========
     @bot.message_handler(commands=['ask'])
     def cmd_ask(message):
