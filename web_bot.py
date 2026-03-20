@@ -4149,8 +4149,8 @@ def register_handlers():
                                          message_id=status_msg.message_id,
                                          parse_mode="Markdown")
             
-                except Exception as e:
-                    bot.reply_to(message, f"❌ Ошибка: {e}")
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка: {e}")
 
     # ========== РЕВИЖН — ЕГО СУТЬ ==========
     REVISION_PERSONALITY_FILE = "revision_personality.json"
