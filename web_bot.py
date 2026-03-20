@@ -5165,27 +5165,8 @@ def register_handlers():
     import time
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
-    STATS_FILE = "x0_stats.json"
-    active_games = {}  # game_id -> game
-    user_game = {}     # user_id -> game_id (для быстрого поиска)
-    
-    def load_x0_stats():
-        if os.path.exists(STATS_FILE):
-            try:
-                with open(STATS_FILE, "r") as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
-    
-    def save_x0_stats(stats):
-        try:
-            with open(STATS_FILE, "w") as f:
-                json.dump(stats, f, indent=2)
-        except Exception as e:
-            print(f"Ошибка сохранения статистики: {e}")
-    
-    x0_stats = load_x0_stats()
+    active_games = {}
+    user_game = {}
     
     WEATHER_EFFECTS = {
         "☀️ Солнечно": {"emoji": "☀️", "desc": "Обычная игра"},
@@ -5238,38 +5219,14 @@ def register_handlers():
             return "draw"
         return None
     
-    def update_stats(user_id, result, size):
-        uid = str(user_id)
-        if uid not in x0_stats:
-            x0_stats[uid] = {"wins": 0, "losses": 0, "draws": 0, "score": 0}
-        if result == "win":
-            x0_stats[uid]["wins"] += 1
-            x0_stats[uid]["score"] += size * 10
-        elif result == "loss":
-            x0_stats[uid]["losses"] += 1
-        elif result == "draw":
-            x0_stats[uid]["draws"] += 1
-            x0_stats[uid]["score"] += (size * 10) // 2
-        save_x0_stats(x0_stats)
-    
-    def get_user_name(chat_id, user_id):
-        try:
-            user = bot.get_chat_member(chat_id, user_id).user
-            return user.first_name
-        except:
-            return str(user_id)
-    
     @bot.message_handler(commands=['x0'])
     def cmd_x0(message):
         user_id = message.from_user.id
         target = None
         chat_id = message.chat.id
     
-        # Если ответ на сообщение
         if message.reply_to_message:
             target = message.reply_to_message.from_user
-    
-        # Если есть @username
         else:
             args = message.text.split()
             if len(args) > 1:
@@ -5280,16 +5237,15 @@ def register_handlers():
                     bot.reply_to(message, f"❌ Пользователь @{username} не найден")
                     return
     
-        # Если нашли цель и это не сам пользователь и не бот
         if target and target.id != user_id and not target.is_bot:
-            game_id = f"x0_{user_id}_{target.id}_{int(time.time())}"
+            game_id = f"{user_id}_{target.id}_{int(time.time())}"
             size = 5
             weather = get_random_weather()
     
             active_games[game_id] = {
                 "id": game_id,
-                "player1": user_id,
-                "player2": target.id,
+                "p1": user_id,
+                "p2": target.id,
                 "board": create_board(size),
                 "size": size,
                 "turn": user_id,
@@ -5299,6 +5255,8 @@ def register_handlers():
             }
             user_game[user_id] = game_id
             user_game[target.id] = game_id
+    
+            print(f"✅ Игра создана: {game_id}")
     
             markup = InlineKeyboardMarkup()
             markup.add(
@@ -5318,15 +5276,14 @@ def register_handlers():
             )
             return
     
-        # Игра с ботом
-        game_id = f"x0_bot_{user_id}_{int(time.time())}"
+        game_id = f"bot_{user_id}_{int(time.time())}"
         size = 5
         weather = get_random_weather()
     
         game = {
             "id": game_id,
-            "player1": user_id,
-            "player2": "bot",
+            "p1": user_id,
+            "p2": "bot",
             "board": create_board(size),
             "size": size,
             "turn": user_id,
@@ -5353,76 +5310,69 @@ def register_handlers():
         action = data[1]
         game_id = data[2]
     
+        print(f"🔍 Callback: action={action}, game_id={game_id}")
+        print(f"🔍 Active games: {list(active_games.keys())}")
+    
         game = active_games.get(game_id)
         if not game:
-            bot.answer_callback_query(call.id, "❌ Игра не найдена")
+            bot.answer_callback_query(call.id, f"❌ Игра {game_id} не найдена")
+            print(f"❌ Игра {game_id} не найдена в active_games")
             return
     
-        # Принять вызов
         if action == "accept":
             if game["status"] != "waiting":
                 bot.answer_callback_query(call.id, "❌ Вызов уже обработан")
                 return
-            if call.from_user.id != game["player2"]:
+            if call.from_user.id != game["p2"]:
                 bot.answer_callback_query(call.id, "❌ Это не твой вызов")
                 return
     
             game["status"] = "active"
-            weather_emoji = WEATHER_EFFECTS[game["weather"]]["emoji"]
             markup = board_to_markup(game["board"], game_id, game["size"])
     
-            p1_name = get_user_name(game["chat_id"], game["player1"])
-            p2_name = get_user_name(game["chat_id"], game["player2"])
-    
             text = f"🎮 **Крестики-нолики {game['size']}x{game['size']}**\n"
-            text += f"{weather_emoji} Погода: **{game['weather']}**\n"
+            text += f"{WEATHER_EFFECTS[game['weather']]['emoji']} Погода: **{game['weather']}**\n"
             text += f"📖 {WEATHER_EFFECTS[game['weather']]['desc']}\n\n"
-            text += f"❌ Ход **{p1_name}** (крестики)"
+            text += f"❌ Ход **{game['p1']}** (крестики)"
     
             bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
             bot.answer_callback_query(call.id, "🎮 Игра началась!")
             return
     
-        # Отказаться
         if action == "decline":
-            if call.from_user.id != game["player2"]:
+            if call.from_user.id != game["p2"]:
                 bot.answer_callback_query(call.id, "❌ Это не твой вызов")
                 return
             bot.edit_message_text(f"❌ {call.from_user.first_name} отказался от игры.", chat_id=game["chat_id"], message_id=call.message.message_id)
-            bot.send_message(game["player1"], f"❌ {call.from_user.first_name} отказался от игры.")
+            bot.send_message(game["p1"], f"❌ {call.from_user.first_name} отказался от игры.")
             active_games.pop(game_id, None)
-            for uid in [game["player1"], game["player2"]]:
+            for uid in [game["p1"], game["p2"]]:
                 if user_game.get(uid) == game_id:
                     user_game.pop(uid, None)
             bot.answer_callback_query(call.id, "Вызов отклонён")
             return
     
-        # Сдаться
         if action == "surrender":
             if game["status"] != "active":
                 bot.answer_callback_query(call.id, "❌ Игра уже завершена")
                 return
-            if call.from_user.id not in [game["player1"], game["player2"]]:
+            if call.from_user.id not in [game["p1"], game["p2"]]:
                 bot.answer_callback_query(call.id, "❌ Ты не участник")
                 return
     
             loser = call.from_user.id
-            winner = game["player1"] if loser == game["player2"] else game["player2"]
-    
-            update_stats(loser, "loss", game["size"])
-            update_stats(winner, "win", game["size"])
+            winner = game["p1"] if loser == game["p2"] else game["p2"]
     
             text = f"🏳️ **{call.from_user.first_name} сдаётся!**\n\n🏆 Победитель: {winner}"
             bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
             bot.send_message(winner, f"🏆 Твой соперник сдался! Ты победил!")
             active_games.pop(game_id, None)
-            for uid in [game["player1"], game["player2"]]:
+            for uid in [game["p1"], game["p2"]]:
                 if user_game.get(uid) == game_id:
                     user_game.pop(uid, None)
             bot.answer_callback_query(call.id, "Игра завершена")
             return
     
-        # Ход
         if action == "move":
             if game["status"] != "active":
                 bot.answer_callback_query(call.id, "❌ Игра уже завершена")
@@ -5432,7 +5382,7 @@ def register_handlers():
                 return
     
             i, j = int(data[3]), int(data[4])
-            current_symbol = "❌" if game["turn"] == game["player1"] else "⭕"
+            current_symbol = "❌" if game["turn"] == game["p1"] else "⭕"
     
             if game["board"][i][j] != "⬜":
                 bot.answer_callback_query(call.id, "❌ Клетка занята")
@@ -5442,177 +5392,49 @@ def register_handlers():
             winner = check_winner(game["board"], game["size"])
     
             if winner == "❌":
-                update_stats(game["player1"], "win", game["size"])
-                update_stats(game["player2"], "loss", game["size"])
-                text = f"🎉 **ПОБЕДА!**\n\n🏆 Победил {game['player1']}"
+                text = f"🎉 **ПОБЕДА!**\n\n🏆 Победил {game['p1']}"
                 bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
                 active_games.pop(game_id, None)
-                for uid in [game["player1"], game["player2"]]:
+                for uid in [game["p1"], game["p2"]]:
                     if user_game.get(uid) == game_id:
                         user_game.pop(uid, None)
                 bot.answer_callback_query(call.id, "🎉 ПОБЕДА!")
                 return
     
             if winner == "⭕":
-                update_stats(game["player2"], "win", game["size"])
-                update_stats(game["player1"], "loss", game["size"])
-                text = f"🎉 **ПОБЕДА!**\n\n🏆 Победил {game['player2']}"
+                text = f"🎉 **ПОБЕДА!**\n\n🏆 Победил {game['p2']}"
                 bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
                 active_games.pop(game_id, None)
-                for uid in [game["player1"], game["player2"]]:
+                for uid in [game["p1"], game["p2"]]:
                     if user_game.get(uid) == game_id:
                         user_game.pop(uid, None)
                 bot.answer_callback_query(call.id, "🎉 ПОБЕДА!")
                 return
     
             if winner == "draw":
-                update_stats(game["player1"], "draw", game["size"])
-                update_stats(game["player2"], "draw", game["size"])
                 text = f"🤝 **НИЧЬЯ!**"
                 bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
                 active_games.pop(game_id, None)
-                for uid in [game["player1"], game["player2"]]:
+                for uid in [game["p1"], game["p2"]]:
                     if user_game.get(uid) == game_id:
                         user_game.pop(uid, None)
                 bot.answer_callback_query(call.id, "🤝 Ничья")
                 return
     
-            # Смена хода
-            game["turn"] = game["player2"] if game["turn"] == game["player1"] else game["player1"]
+            game["turn"] = game["p2"] if game["turn"] == game["p1"] else game["p1"]
     
-            weather_emoji = WEATHER_EFFECTS[game["weather"]]["emoji"]
             markup = board_to_markup(game["board"], game_id, game["size"])
-    
             next_player = game["turn"]
-            next_symbol = "❌" if next_player == game["player1"] else "⭕"
-            next_name = get_user_name(game["chat_id"], next_player)
+            next_symbol = "❌" if next_player == game["p1"] else "⭕"
     
             text = f"🎮 **Крестики-нолики {game['size']}x{game['size']}**\n"
-            text += f"{weather_emoji} Погода: **{game['weather']}**\n"
+            text += f"{WEATHER_EFFECTS[game['weather']]['emoji']} Погода: **{game['weather']}**\n"
             text += f"📖 {WEATHER_EFFECTS[game['weather']]['desc']}\n\n"
-            text += f"{next_symbol} Ход **{next_name}**"
+            text += f"{next_symbol} Ход **{next_player}**"
     
             bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
             bot.answer_callback_query(call.id, "✅ Ход сделан")
 
-        
-    # ========== АНТИССЫЛКА (УЛУЧШЕННАЯ) ==========
-    import re
-    import time
-    
-    ANTILINK_FILE = "antilink_settings.json"
-    
-    def load_antilink_settings():
-        if os.path.exists(ANTILINK_FILE):
-            try:
-                with open(ANTILINK_FILE, "r") as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
-    
-    def save_antilink_settings(settings):
-        try:
-            with open(ANTILINK_FILE, "w") as f:
-                json.dump(settings, f, indent=2)
-        except Exception as e:
-            print(f"Ошибка сохранения настроек антиссылки: {e}")
-    
-    antilink_settings = load_antilink_settings()
-    
-    @bot.message_handler(commands=['antilink'])
-    def cmd_antilink(message):
-        chat_id = str(message.chat.id)
-        
-        # Проверяем, является ли пользователь админом в этом чате
-        try:
-            user_status = bot.get_chat_member(chat_id, message.from_user.id).status
-            if user_status not in ['creator', 'administrator']:
-                bot.reply_to(message, "❌ Только администраторы чата могут управлять антиссылкой.")
-                return
-        except Exception as e:
-            print(f"Не удалось проверить права: {e}")
-    
-        args = message.text.split()
-        if len(args) < 2:
-            status = "включена" if antilink_settings.get(chat_id, False) else "выключена"
-            bot.reply_to(message, f"🛡️ В этом чате антиссылка {status}.\nИспользуй: /antilink on / off", parse_mode="Markdown")
-            return
-    
-        if args[1].lower() in ['on', 'вкл', 'да']:
-            antilink_settings[chat_id] = True
-            save_antilink_settings(antilink_settings)
-            bot.reply_to(message, "🛡️ Антиссылка включена. Все ссылки и подозрительные сообщения будут удаляться.", parse_mode="Markdown")
-        elif args[1].lower() in ['off', 'выкл', 'нет']:
-            antilink_settings[chat_id] = False
-            save_antilink_settings(antilink_settings)
-            bot.reply_to(message, "🛡️ Антиссылка выключена.", parse_mode="Markdown")
-        else:
-            bot.reply_to(message, "❌ Используй: /antilink on / off")
-    
-    # Обработчик всех сообщений
-    @bot.message_handler(func=lambda message: True)
-    def anti_link_checker(message):
-        # Игнорируем личные сообщения
-        if message.chat.type == 'private':
-            return
-    
-        chat_id = str(message.chat.id)
-    
-        # Проверяем, включена ли защита в этом чате
-        if not antilink_settings.get(chat_id, False):
-            return
-    
-        # Кто отправил (бот или человек)
-        is_bot = message.from_user.is_bot
-        should_delete = False
-        delete_reason = ""
-    
-        # Текст сообщения (основной + подпись к медиа)
-        text = (message.text or message.caption or "").lower()
-    
-        # === 1. Проверка на ссылки в ТЕКСТЕ ===
-        # Регулярка ловит http, https, t.me, и короткие ссылки (goo.gl, bit.ly и т.п.)
-        url_pattern = r'(https?://|www\.)[^\s]+|t\.me/\S+|[a-zA-Z0-9\-]+\.(ru|com|org|net|io|me|tv|click|link|site)/\S*'
-        
-        if re.search(url_pattern, text, re.IGNORECASE):
-            should_delete = True
-            delete_reason = "ссылка в тексте"
-    
-        # === 2. Проверка на кнопки с URL ===
-        if not should_delete and message.reply_markup:
-            if hasattr(message.reply_markup, 'inline_keyboard'):
-                for row in message.reply_markup.inline_keyboard:
-                    for button in row:
-                        if button.url:
-                            should_delete = True
-                            delete_reason = "кнопка с ссылкой"
-                            break
-                    if should_delete:
-                        break
-    
-        # === 3. Если сообщение от бота, но он не в белом списке — удаляем (опционально) ===
-        # Раскомментируй, если хочешь удалять вообще все сообщения от ботов
-        # if is_bot and message.from_user.id != bot.get_me().id:
-        #     should_delete = True
-        #     delete_reason = "сообщение от другого бота"
-    
-        # === 4. Удаление, если нужно ===
-        if should_delete:
-            try:
-                bot.delete_message(message.chat.id, message.message_id)
-                print(f"🧹 Удалено ({delete_reason}) от {message.from_user.first_name}")
-    
-                # Отправляем и сразу удаляем предупреждение (через 5 секунд)
-                warning = bot.send_message(
-                    message.chat.id,
-                    f"⚠️ Удалено сообщение от {message.from_user.first_name} (причина: {delete_reason})"
-                )
-                time.sleep(5)
-                bot.delete_message(message.chat.id, warning.message_id)
-    
-            except Exception as e:
-                print(f"❌ Не удалось удалить сообщение: {e}")
 
                 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
