@@ -39,13 +39,20 @@ def get_today_holiday():
     return HOLIDAYS.get(today_key, 'обычный день')
 
 def update_chat_title():
+    """Обновляет название чата: добавляет эмодзи праздника"""
     holiday = get_today_holiday()
-    new_title = f"Nirvana {holiday}"
+    
+    # Получаем эмодзи из праздника (первый символ)
+    emoji = holiday.split()[0] if holiday else "🎉"
+    
+    new_title = f"Nirvana {emoji}"
+    
     try:
         bot.set_chat_title(CHAT_ID, new_title)
         print(f"Название обновлено: {new_title}")
     except Exception as e:
         print(f"Ошибка при смене названия: {e}")
+
 
 # ========== НАПОМИНАЛКИ ==========
 REMINDERS_FILE = "reminders.json"
