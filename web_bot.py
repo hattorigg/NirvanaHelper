@@ -4191,6 +4191,157 @@ def register_handlers():
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
 
+    # ========== НАСТОЯЩАЯ ПОГОДА (OpenWeatherMap) ==========
+    import aiohttp
+    import asyncio
+    from datetime import datetime
+    
+    # Функция для запроса погоды (синхронная обёртка)
+    def get_weather_data(city_name):
+        """Получает текущую погоду и прогноз на 5 дней через OpenWeatherMap"""
+        api_key = os.environ.get('OPENWEATHER_API_KEY')
+        if not api_key:
+            return None, "❌ API ключ погоды не настроен"
+        
+        # Кодируем название города для URL
+        import urllib.parse
+        encoded_city = urllib.parse.quote(city_name)
+        
+        # Текущая погода
+        current_url = f"http://api.openweathermap.org/data/2.5/weather?q={encoded_city}&appid={api_key}&units=metric&lang=ru"
+        
+        # Прогноз на 5 дней (каждые 3 часа)
+        forecast_url = f"http://api.openweathermap.org/data/2.5/forecast?q={encoded_city}&appid={api_key}&units=metric&lang=ru"
+        
+        try:
+            import requests
+            # Текущая погода
+            current_resp = requests.get(current_url, timeout=10)
+            if current_resp.status_code != 200:
+                if current_resp.status_code == 404:
+                    return None, f"❌ Город '{city_name}' не найден"
+                return None, f"❌ Ошибка API: {current_resp.status_code}"
+            
+            current_data = current_resp.json()
+            
+            # Прогноз
+            forecast_resp = requests.get(forecast_url, timeout=10)
+            forecast_data = forecast_resp.json() if forecast_resp.status_code == 200 else None
+            
+            return (current_data, forecast_data), None
+            
+        except requests.exceptions.Timeout:
+            return None, "❌ Таймаут подключения к серверу погоды"
+        except Exception as e:
+            return None, f"❌ Ошибка: {str(e)}"
+    
+    # Команда /погода
+    @bot.message_handler(commands=['погода'])
+    def cmd_weather(message):
+        # Получаем название города из сообщения
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            bot.reply_to(message, "🌍 Напиши город после команды, например:\n/погода Омск\n/погода Москва\n/погода London")
+            return
+        
+        city = parts[1].strip()
+        
+        # Отправляем "печатает..."
+        bot.send_chat_action(message.chat.id, 'typing')
+        
+        # Получаем погоду
+        result, error = get_weather_data(city)
+        
+        if error:
+            bot.reply_to(message, error)
+            return
+        
+        current_data, forecast_data = result
+        
+        # Формируем красивое сообщение
+        weather_text = format_weather_message(current_data, forecast_data, city)
+        
+        # Отправляем
+        bot.reply_to(message, weather_text, parse_mode='HTML')
+    
+    def format_weather_message(current, forecast, city):
+        """Форматирует погоду в красивое сообщение"""
+        # Текущая погода
+        temp = round(current['main']['temp'])
+        feels_like = round(current['main']['feels_like'])
+        humidity = current['main']['humidity']
+        wind_speed = current['wind']['speed']
+        pressure = round(current['main']['pressure'] * 0.750064)  # hPa в мм рт. ст.
+        
+        # Погодные условия
+        weather_main = current['weather'][0]['main']
+        weather_desc = current['weather'][0]['description']
+        
+        # Эмодзи под погоду
+        weather_emoji = {
+            'Clear': '☀️',
+            'Clouds': '☁️',
+            'Rain': '🌧️',
+            'Drizzle': '🌦️',
+            'Thunderstorm': '⛈️',
+            'Snow': '❄️',
+            'Mist': '🌫️',
+            'Fog': '🌫️',
+            'Smoke': '💨',
+            'Haze': '🌫️'
+        }.get(weather_main, '🌡️')
+        
+        # Текущее время
+        now = datetime.now().strftime('%H:%M')
+        
+        # Формируем сообщение
+        text = f"<b>🌍 Погода в {city}</b>\n"
+        text += f"<i>{now} · {weather_desc.capitalize()}</i>\n"
+        text += f"\n{weather_emoji} <b>{temp}°C</b> (ощущается как {feels_like}°C)\n"
+        text += f"💧 Влажность: {humidity}%\n"
+        text += f"💨 Ветер: {wind_speed} м/с\n"
+        text += f"📊 Давление: {pressure} мм рт. ст.\n"
+        
+        # Прогноз на ближайшие дни (если есть)
+        if forecast:
+            text += "\n<b>📅 Прогноз на ближайшие дни:</b>\n"
+            
+            # Группируем прогноз по дням
+            daily_forecasts = {}
+            for item in forecast['list']:
+                dt = datetime.fromtimestamp(item['dt'])
+                date_key = dt.strftime('%Y-%m-%d')
+                if date_key not in daily_forecasts:
+                    daily_forecasts[date_key] = []
+                daily_forecasts[date_key].append(item)
+            
+            # Берём первые 3 дня (сегодня, завтра, послезавтра)
+            for i, (date_key, items) in enumerate(list(daily_forecasts.items())[:3]):
+                if i == 0:
+                    day_name = "Сегодня"
+                elif i == 1:
+                    day_name = "Завтра"
+                else:
+                    day_name = "Послезавтра"
+                
+                # Средняя температура за день
+                temps = [item['main']['temp'] for item in items]
+                avg_temp = round(sum(temps) / len(temps))
+                
+                # Максимальная/минимальная
+                max_temp = round(max(temps))
+                min_temp = round(min(temps))
+                
+                # Основная погода
+                day_weather = items[len(items)//2]['weather'][0]['main']
+                day_emoji = {
+                    'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️',
+                    'Snow': '❄️', 'Thunderstorm': '⛈️'
+                }.get(day_weather, '🌡️')
+                
+                text += f"\n{day_emoji} <b>{day_name}</b>: {avg_temp}°C  (макс {max_temp}° / мин {min_temp}°)"
+        
+        return text
     
     # ========== РЕВИЖН — ЕГО СУТЬ ==========
     REVISION_PERSONALITY_FILE = "revision_personality.json"
