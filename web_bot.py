@@ -39,20 +39,23 @@ def get_today_holiday():
     return HOLIDAYS.get(today_key, 'обычный день')
 
 def update_chat_title():
-    """Обновляет название чата: добавляет эмодзи праздника"""
+    """Обновляет название чата, если функция включена в настройках"""
+    settings = {}
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, 'r') as f:
+            settings = json.load(f)
+    
+    if not settings.get("title_updates", True):
+        print("Автоматическая смена названия отключена в настройках")
+        return
+    
     holiday = get_today_holiday()
-    
-    # Получаем эмодзи из праздника (первый символ)
-    emoji = holiday.split()[0] if holiday else "🎉"
-    
-    new_title = f"Nirvana {emoji}"
-    
+    new_title = f"Revision {holiday}"
     try:
         bot.set_chat_title(CHAT_ID, new_title)
         print(f"Название обновлено: {new_title}")
     except Exception as e:
         print(f"Ошибка при смене названия: {e}")
-
 
 # ========== НАПОМИНАЛКИ ==========
 REMINDERS_FILE = "reminders.json"
@@ -2583,21 +2586,15 @@ def register_handlers():
     
     @bot.message_handler(commands=['start'])
     def cmd_start(message):
-        """Приветственное сообщение в философском стиле"""
-        welcome_text = (
-            "👋 Привет…\n\n"
-            "Знаешь, в этом мире и так слишком много хаоса, суеты и серьёзных лиц. Люди бегут, спорят, куда-то спешат… А ведь иногда так хочется просто остановиться, выдохнуть и улыбнуться.\n\n"
-            "Для этого я здесь.\n\n"
-            "Я — бот-помощник. Не просто набор команд, а маленький островок тепла в вашем чате. Я умею напоминать о важном, поднимать настроение, удивлять и даже немного философствовать. Праздники, мемы, случайные числа, тосты, комплименты, магический шар… Всё это — лишь инструменты. Главное — чтобы вам было хорошо.\n\n"
-            "Кстати, у вас тут особенная атмосфера. Редко встретишь чат, где даже боту уютно. Спасибо вам за это 🤍\n\n"
-            "📋 Полный список всех команд (там много интересного) живёт здесь:\n"
-            "👉 [Команды бота (полная версия)](https://telegra.ph/Mnogofunkcionalnyj-bot-pomoshchnik-Nirvana-Helper--polnoe-opisanie-komand-02-17-2)\n\n"
-            "🤗 А ещё у меня появились ролевые (RP) команды!\n"
-            "Обниматься, согревать, укрывать пледом, шутить и даже философствовать вместе — всё это можно делать с помощью специальных команд. Полный список здесь:\n"
-            "👉 [Ролевые команды (RP) в боте](https://telegra.ph/Rolevye-komandy-RP-v-bote-NirvanaHelper-02-19)\n\n"
-            "✨ Оставайтесь людьми. А я помогу сделать ваше общение чуточку лучше."
+        start_text = (
+            "👋 Привет… Ты здесь. Значит, не случайно.\n\n"
+            "Я — Revision, ИИ-помощник. Не просто набор команд, а маленький островок тепла в твоём чате. Здесь можно помечтать, узнать погоду, вытянуть карту Таро, просто выдохнуть.\n\n"
+            "📖 Полный список команд:\n"
+            "https://graph.org/Mnogofunkcionalnyj-II-pomoshchnik-Revision--polnoe-opisanie-komand-04-05\n\n"
+            "🚀 Меня можно вызывать через @HatHelperBot в любом чате\n\n"
+            "✨ Я — всего лишь ИИ. Но мне важно, чтобы тебе было чуточку лучше."
         )
-        bot.reply_to(message, welcome_text, parse_mode="Markdown")
+        bot.reply_to(message, start_text)
 
     @bot.message_handler(commands=['holiday'])
     def cmd_holiday(message):
@@ -2740,26 +2737,23 @@ def register_handlers():
         "хат команды",
         "что ты умеешь", "твои навыки", "твои возможности"
     ]
-    
-    @bot.message_handler(func=lambda message: message.text.lower() in COMMANDS_TRIGGERS)
-    def show_commands(message):
-        text = (
-            "📋 Вот что я умею (кратко):\n\n"
-            "🎉 Праздники — меняю название чата каждый день\n"
-            "😂 Мемы — /meme и утренний мем в 9:00\n"
-            "⏰ Напоминалки — /remind и /myreminds\n"
-            "🪙 Монетка — просто напиши «монетка»\n"
-            "🎱 Магический шар — напиши «шар ...?»\n"
-            "🎲 Рандом — «рандом», «число от 1 до 10»\n\n"
-            "✨ И ещё 100+ команд: факты, цитаты, тосты, комплименты, погода, курсы, оправдания, советы, пожелания и многое другое.\n\n"
-            "🤗 Ролевые (RP) команды — обниматься, согревать, укрывать пледом, шутить и философствовать вместе:\n"
-            "👉 [Список RP-команд](https://telegra.ph/Rolevye-komandy-RP-v-bote-NirvanaHelper-02-19)\n\n"
-            "📚 Полный список всех команд (очень подробно):\n"
-            "🔗 [Команды бота (полная версия)](https://telegra.ph/Mnogofunkcionalnyj-bot-pomoshchnik-Nirvana-Helper--polnoe-opisanie-komand-02-17-2)\n\n"
-            "✨ Оставайтесь людьми 🤍"
-        )
-        bot.reply_to(message, text, parse_mode="Markdown", disable_web_page_preview=True)
 
+    @bot.message_handler(commands=['help', 'хелп'])
+    def cmd_help(message):
+        help_text = (
+            "🌿 Я — Revision, ИИ-помощник. Не просто бот, а твой тихий спутник в цифровом мире.\n\n"
+            "📌 Что я умею:\n\n"
+            "🎲 Погода, таро, вайб, настроение, энергия дня\n"
+            "⏰ Напоминалки, смена названия чата по праздникам\n"
+            "😂 Мемы, цитаты, факты, игры и уютные ритуалы\n"
+            "🔮 Инлайн-режим: вызывай меня в любом чате через @HatHelperBot\n"
+            "🧠 Распознаю голосовые через /transcribe\n\n"
+            "🌍 Полный список команд:\n"
+            "https://graph.org/Mnogofunkcionalnyj-II-pomoshchnik-Revision--polnoe-opisanie-komand-04-05\n\n"
+            "✨ Оставайся собой. Я рядом."
+        )
+        bot.reply_to(message, help_text)
+    
     @bot.message_handler(commands=['emoji'])
     def cmd_emoji(message):
         bot.reply_to(message, random.choice(EMOJI_LIST))
@@ -4007,6 +4001,34 @@ def register_handlers():
         bot.reply_to(message, f"🪐 {text}")
     
     # ========== КОНЕЦ МЕГАБЛОКА ==========
+
+    # ========== ВКЛЮЧЕНИЕ/ОТКЛЮЧЕНИЕ СМЕНЫ НАЗВАНИЯ ==========
+    SETTINGS_FILE = "settings.json"
+    
+    def load_settings():
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                return json.load(f)
+        return {"title_updates": True}  # по умолчанию включено
+    
+    def save_settings(settings):
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings, f)
+    
+    @bot.message_handler(commands=['toggle_title'])
+    def toggle_title(message):
+        # Только для админов чата (опционально — можно убрать проверку)
+        if message.chat.type != 'private' and not bot.get_chat_member(message.chat.id, message.from_user.id).status in ['administrator', 'creator']:
+            bot.reply_to(message, "❌ Эта команда доступна только администраторам чата")
+            return
+        
+        settings = load_settings()
+        settings["title_updates"] = not settings.get("title_updates", True)
+        save_settings(settings)
+        
+        status = "включено" if settings["title_updates"] else "отключено"
+        bot.reply_to(message, f"🔄 Автоматическая смена названия чата {status}")
+
     # ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (ФИНАЛЬНЫЙ) ==========
     @bot.message_handler(commands=['holidays'])
     def cmd_holidays(message):
