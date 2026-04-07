@@ -50,28 +50,34 @@ def get_today_holiday():
     day, month = today_raw.split('-')
     today_key = f"{month}-{day}"
     return HOLIDAYS.get(today_key, 'обычный день')
-
+    
 def update_chat_title():
     """Обновляет название чата, если функция включена в настройках"""
-    settings = {}
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, 'r') as f:
-            settings = json.load(f)
+    # Безопасное чтение настроек
+    settings = {"title_updates": True}
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    settings.update(loaded)
+    except Exception as e:
+        print(f"⚠️ Ошибка чтения settings.json: {e}")
     
     if not settings.get("title_updates", True):
         print("Автоматическая смена названия отключена в настройках")
         return
     
     holiday = get_today_holiday()
-    # Берём только первый символ (эмодзи) из строки праздника
     emoji = holiday.split()[0] if holiday else "🎉"
     new_title = f"Revision {emoji}"
     
     try:
         bot.set_chat_title(CHAT_ID, new_title)
-        print(f"Название обновлено: {new_title}")
+        print(f"✅ Название обновлено: {new_title}")
     except Exception as e:
-        print(f"Ошибка при смене названия: {e}")
+        print(f"❌ Ошибка при смене названия: {e}")
+
 
 # ========== НАПОМИНАЛКИ ==========
 REMINDERS_FILE = "reminders.json"
