@@ -26,6 +26,19 @@ TOKEN = '8557626824:AAGqUCr8TbhS19kn2Kd2H2Qee1my024-k_U'
 CHAT_ID = -1002281961669
 # ================================
 
+# ========== ИНИЦИАЛИЗАЦИЯ НАСТРОЕК ==========
+SETTINGS_FILE = "settings.json"
+
+def init_settings():
+    """Создаёт файл настроек, если его нет"""
+    if not os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump({"title_updates": True}, f)
+        print("✅ Файл settings.json создан")
+
+init_settings()
+# ============================================
+
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
