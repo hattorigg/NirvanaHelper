@@ -4735,6 +4735,252 @@ def register_handlers():
             return revision["user_names"][str(user_id)]
         return default_name
 
+    # ========== КРЕСТИКИ-НОЛИКИ (КНОПКИ, 3x3, 4x4, 5x5) ==========
+    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    # Хранилище игр: key = chat_id, value = game_data
+    ttt_games = {}
+    
+    def create_ttt_keyboard(board, size, chat_id):
+        """Создаёт клавиатуру с текущим состоянием поля"""
+        markup = InlineKeyboardMarkup(row_width=size)
+        buttons = []
+        idx = 1
+        for i in range(size):
+            row_buttons = []
+            for j in range(size):
+                cell = board[i][j]
+                if cell == " ":
+                    text = "⬜"
+                elif cell == "❌":
+                    text = "❌"
+                else:
+                    text = "⭕"
+                callback = f"ttt_move_{chat_id}_{i}_{j}"
+                row_buttons.append(InlineKeyboardButton(text, callback_data=callback))
+            buttons.append(row_buttons)
+        markup.add(*buttons[0])
+        for row in buttons[1:]:
+            markup.row(*row)
+        return markup
+    
+    def check_win_ttt(board, player, size):
+        # Горизонталь и вертикаль
+        for i in range(size):
+            if all(board[i][j] == player for j in range(size)):
+                return True
+            if all(board[j][i] == player for j in range(size)):
+                return True
+        # Диагонали
+        if all(board[i][i] == player for i in range(size)):
+            return True
+        if all(board[i][size-1-i] == player for i in range(size)):
+            return True
+        return False
+    
+    def check_draw_ttt(board, size):
+        return all(cell != " " for row in board for cell in row)
+    
+    @bot.message_handler(commands=['xo', 'ttt'])
+    def cmd_xo(message):
+        chat_id = message.chat.id
+        if chat_id in ttt_games:
+            bot.reply_to(message, "🎮 В этом чате уже идёт игра! Используй /reset_xo чтобы начать заново.")
+            return
+        
+        # Выбор размера поля через инлайн-кнопки
+        markup = InlineKeyboardMarkup(row_width=3)
+        markup.add(
+            InlineKeyboardButton("3×3", callback_data=f"xo_size_3_{chat_id}"),
+            InlineKeyboardButton("4×4", callback_data=f"xo_size_4_{chat_id}"),
+            InlineKeyboardButton("5×5", callback_data=f"xo_size_5_{chat_id}")
+        )
+        bot.reply_to(message, "🎮 **Выбери размер поля:**", reply_markup=markup, parse_mode='Markdown')
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('xo_size_'))
+    def xo_choose_size(call):
+        chat_id = int(call.data.split('_')[3])
+        size = int(call.data.split('_')[2])
+        
+        if chat_id != call.message.chat.id:
+            bot.answer_callback_query(call.id, "❌ Эта игра не в этом чате!")
+            return
+        
+        if chat_id in ttt_games:
+            bot.answer_callback_query(call.id, "❌ Игра уже начата!")
+            return
+        
+        # Создаём игру
+        board = [[" " for _ in range(size)] for _ in range(size)]
+        ttt_games[chat_id] = {
+            "board": board,
+            "size": size,
+            "players": [call.from_user.id, None],
+            "current": call.from_user.id,
+            "message_id": None,
+            "player_names": [call.from_user.first_name, None]
+        }
+        
+        markup = create_ttt_keyboard(board, size, chat_id)
+        text = (
+            f"🎮 **Крестики-нолики {size}×{size}**\n"
+            f"Игрок 1 (❌): {call.from_user.first_name}\n"
+            f"Ожидание второго игрока...\n\n"
+            f"Второй игрок, нажми **«Присоединиться»**"
+        )
+        
+        # Кнопка присоединения
+        join_markup = InlineKeyboardMarkup()
+        join_markup.add(InlineKeyboardButton("🤝 Присоединиться", callback_data=f"xo_join_{chat_id}_{size}"))
+        
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=join_markup, parse_mode='Markdown')
+        bot.answer_callback_query(call.id)
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('xo_join_'))
+    def xo_join_game(call):
+        chat_id = int(call.data.split('_')[2])
+        size = int(call.data.split('_')[3])
+        
+        if chat_id != call.message.chat.id:
+            bot.answer_callback_query(call.id, "❌ Не тот чат!")
+            return
+        
+        if chat_id not in ttt_games:
+            bot.answer_callback_query(call.id, "❌ Игра не найдена. Начни новую командой /xo")
+            return
+        
+        game = ttt_games[chat_id]
+        if game["players"][1] is not None:
+            bot.answer_callback_query(call.id, "❌ Второй игрок уже присоединился!")
+            return
+        
+        if game["players"][0] == call.from_user.id:
+            bot.answer_callback_query(call.id, "❌ Ты создал игру! Жди второго игрока.")
+            return
+        
+        # Присоединяем игрока
+        game["players"][1] = call.from_user.id
+        game["player_names"][1] = call.from_user.first_name
+        game["current"] = game["players"][0]  # первый игрок ходит первым
+        
+        # Обновляем сообщение с игрой
+        markup = create_ttt_keyboard(game["board"], size, chat_id)
+        text = (
+            f"🎮 **Крестики-нолики {size}×{size}**\n"
+            f"❌ {game['player_names'][0]}\n"
+            f"⭕ {game['player_names'][1]}\n\n"
+            f"Ход: {game['player_names'][0]} (❌)"
+        )
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+        bot.answer_callback_query(call.id, "✅ Ты присоединился! Ходите по кнопкам.")
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('ttt_move_'))
+    def xo_move(call):
+        parts = call.data.split('_')
+        chat_id = int(parts[2])
+        row = int(parts[3])
+        col = int(parts[4])
+        
+        if chat_id != call.message.chat.id:
+            bot.answer_callback_query(call.id, "❌ Не тот чат!")
+            return
+        
+        if chat_id not in ttt_games:
+            bot.answer_callback_query(call.id, "❌ Игра не найдена!")
+            return
+        
+        game = ttt_games[chat_id]
+        size = game["size"]
+        board = game["board"]
+        user_id = call.from_user.id
+        
+        # Проверяем, чей ход
+        if game["current"] != user_id:
+            bot.answer_callback_query(call.id, "⏳ Сейчас не твой ход!")
+            return
+        
+        # Проверяем, участвует ли игрок
+        if user_id not in game["players"]:
+            bot.answer_callback_query(call.id, "❌ Ты не участвуешь в этой игре!")
+            return
+        
+        # Проверяем, свободна ли клетка
+        if board[row][col] != " ":
+            bot.answer_callback_query(call.id, "❌ Эта клетка уже занята!")
+            return
+        
+        # Определяем символ
+        player_symbol = "❌" if user_id == game["players"][0] else "⭕"
+        
+        # Делаем ход
+        board[row][col] = player_symbol
+        
+        # Проверяем победу
+        if check_win_ttt(board, player_symbol, size):
+            winner_name = game["player_names"][0] if player_symbol == "❌" else game["player_names"][1]
+            text = (
+                f"🏆 **ИГРА ОКОНЧЕНА!**\n"
+                f"🥳 Победитель: {winner_name} ({player_symbol})\n\n"
+                f"Нажми /xo чтобы сыграть снова."
+            )
+            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+            del ttt_games[chat_id]
+            bot.answer_callback_query(call.id, f"🎉 {winner_name} победил!")
+            return
+        
+        # Проверяем ничью
+        if check_draw_ttt(board, size):
+            text = (
+                f"🤝 **ИГРА ОКОНЧЕНА!**\n"
+                f"Ничья! 🤝\n\n"
+                f"Нажми /xo чтобы сыграть снова."
+            )
+            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+            del ttt_games[chat_id]
+            bot.answer_callback_query(call.id, "🤝 Ничья!")
+            return
+        
+        # Меняем ход
+        game["current"] = game["players"][1] if user_id == game["players"][0] else game["players"][0]
+        current_name = game["player_names"][0] if game["current"] == game["players"][0] else game["player_names"][1]
+        current_symbol = "❌" if game["current"] == game["players"][0] else "⭕"
+        
+        # Обновляем клавиатуру и текст
+        markup = create_ttt_keyboard(board, size, chat_id)
+        text = (
+            f"🎮 **Крестики-нолики {size}×{size}**\n"
+            f"❌ {game['player_names'][0]}\n"
+            f"⭕ {game['player_names'][1]}\n\n"
+            f"Ход: {current_name} ({current_symbol})"
+        )
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+        bot.answer_callback_query(call.id)
+    
+    @bot.message_handler(commands=['reset_xo'])
+    def reset_xo(message):
+        chat_id = message.chat.id
+        if chat_id in ttt_games:
+            del ttt_games[chat_id]
+            bot.reply_to(message, "🔄 Игра сброшена. Начинай новую командой /xo")
+        else:
+            bot.reply_to(message, "❌ Нет активной игры")
+    
+    @bot.message_handler(commands=['xo_help'])
+    def xo_help(message):
+        help_text = (
+            "🎮 **Крестики-нолики**\n\n"
+            "/xo — начать игру\n"
+            "/reset_xo — сбросить текущую игру\n\n"
+            "После старта выбери размер поля (3×3, 4×4 или 5×5).\n"
+            "Второй игрок присоединяется по кнопке.\n"
+            "Ходите, нажимая на кнопки с клетками.\n"
+            "❌ — крестики (ходит первый)\n"
+            "⭕ — нолики (ходит второй)\n\n"
+            "Удачи!"
+        )
+        bot.reply_to(message, help_text, parse_mode='Markdown')
+    # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ ==========    
+
     # ========== КВЕСТЫ (РАБОЧАЯ ВЕРСИЯ) ==========
     STORY_FILE = "story_states.json"
     GROUP_STORY_FILE = "group_story.json"
