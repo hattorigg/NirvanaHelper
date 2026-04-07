@@ -2613,7 +2613,7 @@ def register_handlers():
             "Я — Revision, ИИ-помощник. Не просто набор команд, а маленький островок тепла в твоём чате. Здесь можно помечтать, узнать погоду, вытянуть карту Таро, просто выдохнуть.\n\n"
             "📖 Полный список команд:\n"
             "https://graph.org/Mnogofunkcionalnyj-II-pomoshchnik-Revision--polnoe-opisanie-komand-04-05\n\n"
-            "🚀 Меня можно вызывать через @HatHelperBot в любом чате\n\n"
+            "🚀 Меня можно вызывать через @RevisionMainBot в любом чате\n\n"
             "✨ Я — всего лишь ИИ. Но мне важно, чтобы тебе было чуточку лучше."
         )
         bot.reply_to(message, start_text)
@@ -2768,7 +2768,7 @@ def register_handlers():
             "🎲 Погода, таро, вайб, настроение, энергия дня\n"
             "⏰ Напоминалки, смена названия чата по праздникам\n"
             "😂 Мемы, цитаты, факты, игры и уютные ритуалы\n"
-            "🔮 Инлайн-режим: вызывай меня в любом чате через @HatHelperBot\n"
+            "🔮 Инлайн-режим: вызывай меня в любом чате через @RevisionMainBot\n"
             "🧠 Распознаю голосовые через /transcribe\n\n"
             "🌍 Полный список команд:\n"
             "https://graph.org/Mnogofunkcionalnyj-II-pomoshchnik-Revision--polnoe-opisanie-komand-04-05\n\n"
