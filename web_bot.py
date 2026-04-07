@@ -50,7 +50,10 @@ def update_chat_title():
         return
     
     holiday = get_today_holiday()
-    new_title = f"Revision {holiday}"
+    # Берём только первый символ (эмодзи) из строки праздника
+    emoji = holiday.split()[0] if holiday else "🎉"
+    new_title = f"Revision {emoji}"
+    
     try:
         bot.set_chat_title(CHAT_ID, new_title)
         print(f"Название обновлено: {new_title}")
