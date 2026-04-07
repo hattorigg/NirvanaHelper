@@ -4735,13 +4735,13 @@ def register_handlers():
             return revision["user_names"][str(user_id)]
         return default_name
 
-    # ========== КРЕСТИКИ-НОЛИКИ 2.0 (МЕГА-ВЕРСИЯ) ==========
+    # ========== КРЕСТИКИ-НОЛИКИ 2.0 (МАГИЧЕСКАЯ ВЕРСИЯ) ==========
     import random
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
     ttt_games = {}
     
-    # Эффекты для режима с приколами
+    # Эффекты для магического режима
     SPECIAL_EFFECTS = [
         {"name": "🌪️ Порыв ветра", "effect": "wind", "desc": "Перемешивает поле случайным образом"},
         {"name": "❄️ Заморозка", "effect": "freeze", "desc": "Пропускает ход противника"},
@@ -4753,11 +4753,10 @@ def register_handlers():
         {"name": "💥 Взрыв", "effect": "explosion", "desc": "Уничтожает 3 случайные клетки противника"},
         {"name": "🌀 Водоворот", "effect": "whirlpool", "desc": "Сдвигает все фигуры по кругу"},
         {"name": "⚙️ Хак", "effect": "hack", "desc": "Меняет знак последнего хода противника"},
-        {"name": "🕰️ Замедление", "effect": "slow", "desc": "Противник теряет 10 секунд на следующий ход"},
         {"name": "🎁 Сюрприз", "effect": "surprise", "desc": "Случайный эффект"},
     ]
     
-    def create_field_keyboard(board, rows, cols, chat_id, special=False):
+    def create_field_keyword(board, rows, cols, chat_id, magic=False):
         markup = InlineKeyboardMarkup(row_width=cols)
         buttons = []
         for i in range(rows):
@@ -4804,7 +4803,6 @@ def register_handlers():
     
     def apply_effect(board, rows, cols, player_symbol, effect):
         if effect == "wind":
-            # Перемешивает поле
             flat = [cell for row in board for cell in row if cell != " "]
             random.shuffle(flat)
             idx = 0
@@ -4819,7 +4817,6 @@ def register_handlers():
         elif effect == "extra_turn":
             return "⚡ Ты получаешь дополнительный ход!"
         elif effect == "bug":
-            # Заменяет случайную клетку противника
             empty = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
             if empty:
                 i,j = random.choice(empty)
@@ -4859,10 +4856,6 @@ def register_handlers():
                         board[i][j] = flat[idx]
                         idx += 1
                 return "🌀 Водоворот сдвинул поле!"
-        elif effect == "hack":
-            return "⚙️ Хак! Последний ход противника изменён (эффект не реализован)"
-        elif effect == "slow":
-            return "🕰️ Замедление! Противник потеряет 10 секунд на следующий ход."
         elif effect == "surprise":
             return random.choice(["🎁 Сюрприз! Ничего не произошло...", "🎁 Сюрприз! Ты получил +1 к удаче!", "🎁 Сюрприз! Противник чихнул и пропустил ход."])
         return "✨ Эффект сработал!"
@@ -4877,7 +4870,7 @@ def register_handlers():
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
             InlineKeyboardButton("🎲 Обычный режим", callback_data=f"xo_mode_normal_{chat_id}"),
-            InlineKeyboardButton("✨ Прикольный режим", callback_data=f"xo_mode_cool_{chat_id}")
+            InlineKeyboardButton("✨ Магический режим", callback_data=f"xo_mode_cool_{chat_id}")
         )
         bot.reply_to(message, "🎮 **Выбери режим игры:**", reply_markup=markup, parse_mode='Markdown')
     
@@ -4938,7 +4931,7 @@ def register_handlers():
         text = (
             f"🎮 **Крестики-нолики**\n"
             f"Размер: {rows}×{cols}\n"
-            f"Режим: {'✨ Прикольный' if mode == 'cool' else '🎲 Обычный'}\n"
+            f"Режим: {'✨ Магический' if mode == 'cool' else '🎲 Обычный'}\n"
             f"Для победы нужно {win_len} в ряд.\n\n"
             f"Игрок 1: {call.from_user.first_name} (❌)\n"
             f"Ожидание второго игрока..."
@@ -4971,11 +4964,11 @@ def register_handlers():
         game["players"][1] = call.from_user.id
         game["player_names"][1] = call.from_user.first_name
         
-        markup = create_field_keyboard(game["board"], rows, cols, chat_id, mode == 'cool')
+        markup = create_field_keyword(game["board"], rows, cols, chat_id, mode == 'cool')
         text = (
             f"🎮 **Крестики-нолики**\n"
             f"Размер: {rows}×{cols}\n"
-            f"Режим: {'✨ Прикольный' if mode == 'cool' else '🎲 Обычный'}\n"
+            f"Режим: {'✨ Магический' if mode == 'cool' else '🎲 Обычный'}\n"
             f"Для победы нужно {win_len} в ряд.\n\n"
             f"❌ {game['player_names'][0]}\n"
             f"⭕ {game['player_names'][1]}\n\n"
@@ -5017,7 +5010,6 @@ def register_handlers():
         player_symbol = "❌" if user_id == game["players"][0] else "⭕"
         game["board"][row][col] = player_symbol
         
-        # Проверка победы
         if check_win_condition(game["board"], game["rows"], game["cols"], player_symbol, game["win_len"]):
             winner_name = game["player_names"][0] if player_symbol == "❌" else game["player_names"][1]
             text = f"🏆 **ПОБЕДА!**\n🥳 {winner_name} выиграл!\n\nНажми /xo чтобы сыграть снова."
@@ -5026,7 +5018,6 @@ def register_handlers():
             bot.answer_callback_query(call.id, f"🎉 {winner_name} победил!")
             return
         
-        # Проверка ничьи
         if all(cell != " " for row in game["board"] for cell in row):
             text = "🤝 **НИЧЬЯ!**\n\nНажми /xo чтобы сыграть снова."
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
@@ -5034,13 +5025,11 @@ def register_handlers():
             bot.answer_callback_query(call.id, "🤝 Ничья!")
             return
         
-        # Прикольный режим: эффект
         effect_text = ""
         if game["mode"] == "cool" and random.random() < 0.3:
             effect = random.choice(SPECIAL_EFFECTS)
             effect_text = f"\n✨ {apply_effect(game['board'], game['rows'], game['cols'], player_symbol, effect['effect'])}"
         
-        # Меняем ход
         if game.get("freeze"):
             game["freeze"] = False
             effect_text += "\n❄️ Ход противника пропущен из-за заморозки"
@@ -5055,11 +5044,11 @@ def register_handlers():
         current_name = game["player_names"][0] if game["current"] == game["players"][0] else game["player_names"][1]
         current_symbol = "❌" if game["current"] == game["players"][0] else "⭕"
         
-        markup = create_field_keyboard(game["board"], game["rows"], game["cols"], chat_id, game["mode"] == 'cool')
+        markup = create_field_keyword(game["board"], game["rows"], game["cols"], chat_id, game["mode"] == 'cool')
         text = (
             f"🎮 **Крестики-нолики**\n"
             f"Размер: {game['rows']}×{game['cols']}\n"
-            f"Режим: {'✨ Прикольный' if game['mode'] == 'cool' else '🎲 Обычный'}\n"
+            f"Режим: {'✨ Магический' if game['mode'] == 'cool' else '🎲 Обычный'}\n"
             f"Для победы нужно {game['win_len']} в ряд.\n\n"
             f"❌ {game['player_names'][0]}\n"
             f"⭕ {game['player_names'][1]}\n\n"
@@ -5067,7 +5056,38 @@ def register_handlers():
         )
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
         bot.answer_callback_query(call.id)
-    # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ 2.0 ==========    
+    
+    @bot.message_handler(commands=['reset_xo'])
+    def reset_xo_game(message):
+        chat_id = message.chat.id
+        if chat_id in ttt_games:
+            del ttt_games[chat_id]
+            bot.reply_to(message, "🔄 Игра сброшена. Можешь начать новую через /xo")
+        else:
+            bot.reply_to(message, "❌ Нет активной игры")
+    
+    @bot.message_handler(commands=['xo_help'])
+    def xo_help_command(message):
+        help_text = (
+            "🎮 **Крестики-нолики — помощь**\n\n"
+            "🔹 /xo — начать новую игру\n"
+            "🔹 /reset_xo — сбросить текущую игру\n\n"
+            "📌 **Режимы:**\n"
+            "• Обычный — классическая игра\n"
+            "• Магический — случайные эффекты (ветер, заморозка, взрыв и др.)\n\n"
+            "📌 **Размеры поля:**\n"
+            "• 3×3 — победа за 3 в ряд\n"
+            "• 5×5 — победа за 4 в ряд\n"
+            "• 8×12 — победа за 5 в ряд\n\n"
+            "✨ **Магические эффекты:**\n"
+            + "\n".join([f"• {e['name']} — {e['desc']}" for e in SPECIAL_EFFECTS[:10]]) + "\n\n"
+            "🎲 Ходите, нажимая на кнопки с полем.\n"
+            "❌ — крестики (ходит первый)\n"
+            "⭕ — нолики (ходит второй)\n\n"
+            "Удачи! 🍀"
+        )
+        bot.reply_to(message, help_text, parse_mode='Markdown')
+    # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ 2.0 ==========
 
     # ========== КВЕСТЫ (РАБОЧАЯ ВЕРСИЯ) ==========
     STORY_FILE = "story_states.json"
