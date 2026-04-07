@@ -5099,6 +5099,197 @@ def register_handlers():
 
     # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ 2.0 ==========
 
+    # ========== СТАТИСТИКА (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ, HTML) ==========
+    import time
+    from datetime import datetime
+    
+    CREATOR_ID = 6001013593  # твой Telegram ID
+    
+    STATS_FILE = "stats.json"
+    USERS_STATS_FILE = "users_stats.json"
+    CHATS_STATS_FILE = "chats_stats.json"
+    HISTORY_FILE = "messages_history.json"
+    
+    def load_json(file):
+        if os.path.exists(file):
+            with open(file, 'r') as f:
+                return json.load(f)
+        return {}
+    
+    def save_json(file, data):
+        with open(file, 'w') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    def update_stats(message):
+        try:
+            user_id = message.from_user.id
+            user_name = message.from_user.username or f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
+            chat_id = message.chat.id
+            chat_name = message.chat.title or "личка"
+            text = message.text or "[не текст]"
+            
+            stats = load_json(STATS_FILE)
+            if not stats:
+                stats = {"total_messages": 0, "total_users": 0, "total_chats": 0}
+            stats["total_messages"] = stats.get("total_messages", 0) + 1
+            
+            users_stats = load_json(USERS_STATS_FILE)
+            if str(user_id) not in users_stats:
+                users_stats[str(user_id)] = {"name": user_name, "first_seen": time.time(), "messages": 0, "chats": []}
+                stats["total_users"] = len(users_stats)
+            users_stats[str(user_id)]["messages"] += 1
+            users_stats[str(user_id)]["name"] = user_name
+            if str(chat_id) not in users_stats[str(user_id)]["chats"]:
+                users_stats[str(user_id)]["chats"].append(str(chat_id))
+            
+            chats_stats = load_json(CHATS_STATS_FILE)
+            if str(chat_id) not in chats_stats:
+                chats_stats[str(chat_id)] = {"name": chat_name, "first_seen": time.time(), "messages": 0, "users": []}
+                stats["total_chats"] = len(chats_stats)
+            chats_stats[str(chat_id)]["messages"] += 1
+            chats_stats[str(chat_id)]["name"] = chat_name
+            if str(user_id) not in chats_stats[str(chat_id)]["users"]:
+                chats_stats[str(chat_id)]["users"].append(str(user_id))
+            
+            save_json(STATS_FILE, stats)
+            save_json(USERS_STATS_FILE, users_stats)
+            save_json(CHATS_STATS_FILE, chats_stats)
+            
+            history = load_json(HISTORY_FILE)
+            if str(user_id) not in history:
+                history[str(user_id)] = []
+            history[str(user_id)].append({"time": time.time(), "chat_id": chat_id, "text": text[:200]})
+            if len(history[str(user_id)]) > 50:
+                history[str(user_id)] = history[str(user_id)][-50:]
+            save_json(HISTORY_FILE, history)
+        except Exception as e:
+            print(f"Ошибка сбора статистики: {e}")
+    
+    # ПЕРЕХВАТЧИК — НЕ БЛОКИРУЕТ КОМАНДЫ
+    @bot.message_handler(func=lambda message: message.text and not message.text.startswith('/'), content_types=['text'])
+    def stats_collector(message):
+        update_stats(message)
+    
+    @bot.message_handler(commands=['stats'])
+    def cmd_stats(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        stats = load_json(STATS_FILE)
+        reply = (
+            f"📊 <b>Статистика бота Revision</b>\n\n"
+            f"💬 Сообщений: {stats.get('total_messages', 0)}\n"
+            f"👥 Пользователей: {stats.get('total_users', 0)}\n"
+            f"🏠 Чатов: {stats.get('total_chats', 0)}"
+        )
+        bot.reply_to(message, reply, parse_mode='HTML')
+    
+    @bot.message_handler(commands=['users'])
+    def cmd_users(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        users_stats = load_json(USERS_STATS_FILE)
+        if not users_stats:
+            bot.reply_to(message, "📭 Нет данных о пользователях")
+            return
+        sorted_users = sorted(users_stats.items(), key=lambda x: x[1].get("messages", 0), reverse=True)
+        reply = "👥 <b>Список пользователей</b>\n\n"
+        for i, (uid, data) in enumerate(sorted_users[:20], 1):
+            name = data.get("name", "без имени")
+            msgs = data.get("messages", 0)
+            reply += f"{i}. {name} — {msgs} сообщ(а)\n"
+        if len(sorted_users) > 20:
+            reply += f"\n... и ещё {len(sorted_users) - 20} пользователей"
+        bot.reply_to(message, reply, parse_mode='HTML')
+    
+    @bot.message_handler(commands=['chats'])
+    def cmd_chats(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        chats_stats = load_json(CHATS_STATS_FILE)
+        if not chats_stats:
+            bot.reply_to(message, "📭 Нет данных о чатах")
+            return
+        sorted_chats = sorted(chats_stats.items(), key=lambda x: x[1].get("messages", 0), reverse=True)
+        reply = "🏠 <b>Список чатов</b>\n\n"
+        for i, (cid, data) in enumerate(sorted_chats[:20], 1):
+            name = data.get("name", "без названия")
+            msgs = data.get("messages", 0)
+            reply += f"{i}. {name} — {msgs} сообщ(а)\n"
+        if len(sorted_chats) > 20:
+            reply += f"\n... и ещё {len(sorted_chats) - 20} чатов"
+        bot.reply_to(message, reply, parse_mode='HTML')
+    
+    @bot.message_handler(commands=['activity'])
+    def cmd_activity(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            bot.reply_to(message, "❌ Укажи пользователя: /activity @username")
+            return
+        target = parts[1].strip().lstrip('@')
+        users_stats = load_json(USERS_STATS_FILE)
+        found = None
+        for uid, data in users_stats.items():
+            name = data.get("name", "")
+            if target.lower() in name.lower():
+                found = (uid, data)
+                break
+        if not found:
+            bot.reply_to(message, f"❌ Пользователь @{target} не найден")
+            return
+        uid, data = found
+        name = data.get("name", "без имени")
+        msgs = data.get("messages", 0)
+        first_seen = data.get("first_seen", 0)
+        first_seen_str = datetime.fromtimestamp(first_seen).strftime('%d.%m.%Y %H:%M') if first_seen else "неизвестно"
+        reply = (
+            f"📊 <b>Статистика пользователя</b>\n\n"
+            f"👤 Имя: {name}\n"
+            f"🆔 ID: <code>{uid}</code>\n"
+            f"💬 Сообщений: {msgs}\n"
+            f"📅 Первое появление: {first_seen_str}\n"
+            f"🏠 Чатов: {len(data.get('chats', []))}"
+        )
+        bot.reply_to(message, reply, parse_mode='HTML')
+    
+    @bot.message_handler(commands=['history'])
+    def cmd_history(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            bot.reply_to(message, "❌ Укажи пользователя: /history @username")
+            return
+        target = parts[1].strip().lstrip('@')
+        users_stats = load_json(USERS_STATS_FILE)
+        found_uid = None
+        for uid, data in users_stats.items():
+            name = data.get("name", "")
+            if target.lower() in name.lower():
+                found_uid = uid
+                break
+        if not found_uid:
+            bot.reply_to(message, f"❌ Пользователь @{target} не найден")
+            return
+        history = load_json(HISTORY_FILE)
+        user_history = history.get(str(found_uid), [])
+        if not user_history:
+            bot.reply_to(message, f"📭 Нет сохранённых сообщений от этого пользователя")
+            return
+        reply = f"📜 <b>Последние сообщения от {target}</b>\n\n"
+        for msg in reversed(user_history[-10:]):
+            time_str = datetime.fromtimestamp(msg.get("time", 0)).strftime('%H:%M')
+            text = msg.get("text", "")[:50]
+            reply += f"<code>{time_str}</code> {text}\n"
+        bot.reply_to(message, reply, parse_mode='HTML')
+    # ========== КОНЕЦ СТАТИСТИКИ ==========     
+
     # ========== КВЕСТЫ (РАБОЧАЯ ВЕРСИЯ) ==========
     STORY_FILE = "story_states.json"
     GROUP_STORY_FILE = "group_story.json"
