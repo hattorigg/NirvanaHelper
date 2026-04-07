@@ -5238,283 +5238,6 @@ def register_handlers():
         except Exception as e:
             bot.reply_to(message, f"❌ Ошибка: {e}")
 
-    # ========== КРЕСТИКИ-НОЛИКИ ==========
-    import random
-    import time
-    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-    
-    # Хранилища
-    active_games = {}
-    user_game = {}
-    
-    # ========== ПОГОДА ==========
-    WEATHER = {
-        "☀️ Солнечно": {"desc": "Обычная игра", "emoji": "☀️"},
-        "🌧️ Дождь": {"desc": "Раз в 3 хода можно сделать ход в любую клетку", "emoji": "🌧️"},
-        "🌫️ Туман": {"desc": "Следующий ход противника скрыт", "emoji": "🌫️"},
-        "⚡ Гроза": {"desc": "Случайная клетка блокируется на 2 хода", "emoji": "⚡"},
-        "🌙 Ночь": {"desc": "Видно только свои ходы", "emoji": "🌙"},
-        "🌈 Радуга": {"desc": "После хода даёт случайный бонус", "emoji": "🌈", "rare": True}
-    }
-    
-    def get_random_weather():
-        if random.random() < 0.2:
-            rare = [w for w in WEATHER if WEATHER[w].get("rare")]
-            return random.choice(rare) if rare else "☀️ Солнечно"
-        return random.choice([w for w in WEATHER if not WEATHER[w].get("rare")])
-    
-    def create_board(size=5):
-        return [["⬜" for _ in range(size)] for _ in range(size)]
-    
-    def board_to_markup(board, game_id, size):
-        markup = InlineKeyboardMarkup(row_width=size)
-        for i in range(size):
-            row = []
-            for j in range(size):
-                cell = board[i][j]
-                text = "❌" if cell == "❌" else "⭕" if cell == "⭕" else "⬜"
-                row.append(InlineKeyboardButton(text, callback_data=f"x0_{game_id}_{i}_{j}"))
-            markup.add(*row)
-        markup.add(InlineKeyboardButton("🔄 Сдаться", callback_data=f"x0_surrender_{game_id}"))
-        return markup
-    
-    def check_winner(board, size):
-        for i in range(size):
-            if all(board[i][j] == board[i][0] and board[i][0] != "⬜" for j in range(size)):
-                return board[i][0]
-            if all(board[j][i] == board[0][i] and board[0][i] != "⬜" for j in range(size)):
-                return board[0][i]
-        if all(board[i][i] == board[0][0] and board[0][0] != "⬜" for i in range(size)):
-            return board[0][0]
-        if all(board[i][size-1-i] == board[0][size-1] and board[0][size-1] != "⬜" for i in range(size)):
-            return board[0][size-1]
-        if all(cell != "⬜" for row in board for cell in row):
-            return "draw"
-        return None
-    
-    @bot.message_handler(commands=['x0'])
-    def cmd_x0(message):
-        user_id = str(message.from_user.id)
-        chat_id = message.chat.id
-    
-        if user_id in user_game:
-            bot.reply_to(message, "❌ У тебя уже есть активная игра")
-            return
-    
-        target = None
-        # 1. Ответ на сообщение
-        if message.reply_to_message:
-            target = message.reply_to_message.from_user
-        # 2. Упоминание @username
-        else:
-            args = message.text.split()
-            if len(args) > 1:
-                username = args[1].replace('@', '')
-                try:
-                    target = bot.get_chat(f"@{username}")
-                except:
-                    bot.reply_to(message, f"❌ Пользователь @{username} не найден")
-                    return
-    
-        # Игра с другом
-        if target and str(target.id) != user_id and not target.is_bot:
-            if str(target.id) in user_game:
-                bot.reply_to(message, f"❌ {target.first_name} уже в игре")
-                return
-    
-            size = 5
-            weather = get_random_weather()
-            game_id = f"{user_id}_{target.id}_{int(time.time())}"
-    
-            game = {
-                "id": game_id,
-                "p1": user_id,
-                "p2": str(target.id),
-                "board": create_board(size),
-                "size": size,
-                "turn": user_id,
-                "weather": weather,
-                "weather_counter": 0,
-                "disabled": [],
-                "status": "waiting",
-                "chat_id": chat_id,
-                "msg_id": None
-            }
-    
-            active_games[game_id] = game
-            user_game[user_id] = game_id
-            user_game[str(target.id)] = game_id
-    
-            markup = InlineKeyboardMarkup()
-            markup.add(
-                InlineKeyboardButton("✅ Принять", callback_data=f"x0_accept_{game_id}"),
-                InlineKeyboardButton("❌ Отказаться", callback_data=f"x0_decline_{game_id}")
-            )
-    
-            msg = bot.send_message(
-                chat_id,
-                f"⚔️ **{message.from_user.first_name} вызывает {target.first_name} на крестики-нолики!**\n\n"
-                f"🎮 Поле: {size}x{size}\n"
-                f"🌤️ Погода: {weather}\n"
-                f"📖 {WEATHER[weather]['desc']}",
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
-            game["msg_id"] = msg.message_id
-            return
-    
-        # Игра с ботом
-        size = 5
-        weather = get_random_weather()
-        game_id = f"bot_{user_id}_{int(time.time())}"
-    
-        game = {
-            "id": game_id,
-            "p1": user_id,
-            "p2": "bot",
-            "board": create_board(size),
-            "size": size,
-            "turn": user_id,
-            "weather": weather,
-            "weather_counter": 0,
-            "disabled": [],
-            "status": "active",
-            "chat_id": chat_id
-        }
-    
-        active_games[game_id] = game
-        user_game[user_id] = game_id
-    
-        markup = board_to_markup(game["board"], game_id, size)
-        text = f"🎮 **Крестики-нолики {size}x{size}**\n"
-        text += f"{WEATHER[weather]['emoji']} Погода: **{weather}**\n"
-        text += f"📖 {WEATHER[weather]['desc']}\n\n"
-        text += f"❌ Твой ход (крестики)"
-    
-        bot.reply_to(message, text, parse_mode="Markdown", reply_markup=markup)
-    
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('x0_'))
-    def x0_callback(call):
-        try:
-            # Разбираем callback_data: x0_action_gameid_координаты
-            parts = call.data.split('_')
-            action = parts[1]
-            game_id = parts[2]
-    
-            game = active_games.get(game_id)
-            if not game:
-                bot.answer_callback_query(call.id, "❌ Игра не найдена")
-                return
-    
-            # Принять вызов
-            if action == "accept":
-                if game["status"] != "waiting":
-                    bot.answer_callback_query(call.id, "❌ Вызов уже обработан")
-                    return
-                if str(call.from_user.id) != game["p2"]:
-                    bot.answer_callback_query(call.id, "❌ Это не твой вызов")
-                    return
-    
-                game["status"] = "active"
-                markup = board_to_markup(game["board"], game_id, game["size"])
-                text = f"🎮 **Крестики-нолики {game['size']}x{game['size']}**\n"
-                text += f"{WEATHER[game['weather']]['emoji']} Погода: **{game['weather']}**\n"
-                text += f"📖 {WEATHER[game['weather']]['desc']}\n\n"
-                text += f"❌ Ход **{game['p1']}** (крестики)"
-    
-                bot.edit_message_text(text, chat_id=game["chat_id"], message_id=game["msg_id"], reply_markup=markup, parse_mode="Markdown")
-                bot.answer_callback_query(call.id, "🎮 Игра началась!")
-                return
-    
-            # Отказаться
-            if action == "decline":
-                if str(call.from_user.id) != game["p2"]:
-                    bot.answer_callback_query(call.id, "❌ Это не твой вызов")
-                    return
-                bot.edit_message_text(f"❌ {call.from_user.first_name} отказался.", chat_id=game["chat_id"], message_id=game["msg_id"])
-                bot.send_message(game["p1"], f"❌ {call.from_user.first_name} отказался.")
-                active_games.pop(game_id, None)
-                for uid in [game["p1"], game["p2"]]:
-                    user_game.pop(uid, None)
-                bot.answer_callback_query(call.id, "Вызов отклонён")
-                return
-    
-            # Сдаться
-            if action == "surrender":
-                if game["status"] != "active":
-                    bot.answer_callback_query(call.id, "❌ Игра уже завершена")
-                    return
-                if str(call.from_user.id) not in [game["p1"], game["p2"]]:
-                    bot.answer_callback_query(call.id, "❌ Ты не участник")
-                    return
-    
-                winner = game["p1"] if str(call.from_user.id) == game["p2"] else game["p2"]
-                text = f"🏳️ **{call.from_user.first_name} сдаётся!**\n\n🏆 Победитель: {winner}"
-                bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
-                bot.send_message(winner, f"🏆 Твой соперник сдался!")
-                active_games.pop(game_id, None)
-                for uid in [game["p1"], game["p2"]]:
-                    user_game.pop(uid, None)
-                bot.answer_callback_query(call.id, "Игра завершена")
-                return
-    
-            # Ход
-            if action == "move":
-                if game["status"] != "active":
-                    bot.answer_callback_query(call.id, "❌ Игра уже завершена")
-                    return
-                if str(call.from_user.id) != game["turn"]:
-                    bot.answer_callback_query(call.id, "❌ Сейчас не твой ход")
-                    return
-    
-                if len(parts) < 5:
-                    bot.answer_callback_query(call.id, "❌ Ошибка координат")
-                    return
-                i, j = int(parts[3]), int(parts[4])
-    
-                if (i, j) in game["disabled"]:
-                    bot.answer_callback_query(call.id, "🔒 Эта клетка заблокирована!")
-                    return
-    
-                if game["board"][i][j] != "⬜":
-                    bot.answer_callback_query(call.id, "❌ Клетка занята")
-                    return
-    
-                symbol = "❌" if game["turn"] == game["p1"] else "⭕"
-                game["board"][i][j] = symbol
-    
-                winner = check_winner(game["board"], game["size"])
-    
-                if winner:
-                    if winner == "draw":
-                        text = "🤝 **НИЧЬЯ!**"
-                    else:
-                        text = f"🎉 **ПОБЕДА!**\n\n🏆 Победил {winner}"
-                    bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, parse_mode="Markdown")
-                    active_games.pop(game_id, None)
-                    for uid in [game["p1"], game["p2"]]:
-                        user_game.pop(uid, None)
-                    bot.answer_callback_query(call.id, "Игра завершена")
-                    return
-    
-                # Смена хода
-                game["turn"] = game["p2"] if game["turn"] == game["p1"] else game["p1"]
-                markup = board_to_markup(game["board"], game_id, game["size"])
-                next_player = game["turn"]
-                next_symbol = "❌" if next_player == game["p1"] else "⭕"
-    
-                text = f"🎮 **Крестики-нолики {game['size']}x{game['size']}**\n"
-                text += f"{WEATHER[game['weather']]['emoji']} Погода: **{game['weather']}**\n"
-                text += f"📖 {WEATHER[game['weather']]['desc']}\n\n"
-                text += f"{next_symbol} Ход **{next_player}**"
-    
-                bot.edit_message_text(text, chat_id=game["chat_id"], message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-                bot.answer_callback_query(call.id, "✅ Ход сделан")
-    
-        except Exception as e:
-            print(f"❌ Ошибка в callback: {e}")
-            bot.answer_callback_query(call.id, "❌ Ошибка")
-
                 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
     "☀️ Доброе утро, чат! Пусть день будет ярким, а настроение — огонь!",
@@ -5561,252 +5284,6 @@ def send_evening_greeting():
         print(f"❌ Ошибка вечернего приветствия: {e}")
 # ====================================================
 
-        # ========== ИНЛАЙН-РЕЖИМ (С РП) ==========
-    @bot.inline_handler(func=lambda query: len(query.query) > 0)
-    def query_text(query):
-        try:
-            user_input = query.query.lower().strip()
-            results = []
-            result_id = 0
-    
-            # 1. Калькулятор
-            if any(op in user_input for op in '+-*/') and re.match(r'^[0-9+\-*/().\s]+$', user_input):
-                try:
-                    calc_result = safe_calculate(user_input)
-                    if calc_result:
-                        result_id += 1
-                        results.append(telebot.types.InlineQueryResultArticle(
-                            id=str(result_id),
-                            title=f"🧮 {user_input} = {calc_result}",
-                            description="Посчитать выражение",
-                            input_message_content=telebot.types.InputTextMessageContent(
-                                f"🧮 {user_input} = {calc_result}"
-                            )
-                        ))
-                except:
-                    pass
-    
-            # 2. Магический шар (упрощённо, без проверки на ?)
-            if "шар" in user_input:
-                ball_answer = random.choice(BALL_ANSWERS)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title=f"🎱 {ball_answer}",
-                    description="Ответ магического шара",
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🎱 {ball_answer}"
-                    )
-                ))
-    
-            # 3. Монетка
-            if any(word in user_input for word in ["монетка", "орел", "решка", "подбрось"]):
-                coin_result = random.choice(["🪙 Орёл!", "🪙 Решка!"])
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title=coin_result,
-                    description="Подбросить монетку",
-                    input_message_content=telebot.types.InputTextMessageContent(coin_result)
-                ))
-    
-            # 4. Случайное число
-            if "рандом" in user_input or "число" in user_input:
-                numbers = [int(w) for w in user_input.split() if w.isdigit()]
-                if len(numbers) >= 2:
-                    num_result = random.randint(min(numbers[0], numbers[1]), max(numbers[0], numbers[1]))
-                    title_text = f"🎲 Число от {min(numbers[0], numbers[1])} до {max(numbers[0], numbers[1])}"
-                    desc_text = f"от {min(numbers[0], numbers[1])} до {max(numbers[0], numbers[1])}"
-                elif len(numbers) == 1:
-                    num_result = random.randint(1, numbers[0])
-                    title_text = f"🎲 Число от 1 до {numbers[0]}"
-                    desc_text = f"от 1 до {numbers[0]}"
-                else:
-                    num_result = random.randint(1, 100)
-                    title_text = "🎲 Число от 1 до 100"
-                    desc_text = "стандартное"
-    
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title=f"{title_text}: {num_result}",
-                    description=f"Случайное число {desc_text}",
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🎲 {num_result}"
-                    )
-                ))
-    
-            # 5. Факты и прочее (как было)
-            if "факт" in user_input and "жутк" not in user_input:
-                fact = random.choice(FACTS)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="🧠 Случайный факт",
-                    description=fact[:60] + "..." if len(fact) > 60 else fact,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🧠 {fact}"
-                    )
-                ))
-    
-            if "жутк" in user_input or "крипи" in user_input:
-                creepy_fact = random.choice(CREEPY_FACTS)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="😱 Жуткий факт",
-                    description=creepy_fact[:60] + "..." if len(creepy_fact) > 60 else creepy_fact,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"😱 {creepy_fact}"
-                    )
-                ))
-    
-            if "цитат" in user_input:
-                quote = random.choice(QUOTES)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="💬 Случайная цитата",
-                    description=quote[:60] + "..." if len(quote) > 60 else quote,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"💬 {quote}"
-                    )
-                ))
-    
-            if "совет" in user_input:
-                advice = random.choice(ADVICES)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="💡 Полезный совет",
-                    description=advice[:60] + "..." if len(advice) > 60 else advice,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"💡 {advice}"
-                    )
-                ))
-    
-            if "оправдан" in user_input:
-                excuse = random.choice(EXCUSES)
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="🤷 Оправдание",
-                    description=excuse[:60] + "..." if len(excuse) > 60 else excuse,
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        f"🤷 {excuse}"
-                    )
-                ))
-    
-            if "мем" in user_input:
-                try:
-                    memes = get_local_memes()
-                    if memes:
-                        meme_file = random.choice(memes)
-                        result_id += 1
-                        results.append(telebot.types.InlineQueryResultArticle(
-                            id=str(result_id),
-                            title="😂 Случайный мем",
-                            description=f"Нажми, чтобы получить мем",
-                            input_message_content=telebot.types.InputTextMessageContent(
-                                f"🍿 Держи мемосик! (файл: {meme_file})"
-                            )
-                        ))
-                    else:
-                        result_id += 1
-                        results.append(telebot.types.InlineQueryResultArticle(
-                            id=str(result_id),
-                            title="📭 Мемов пока нет",
-                            description="Загрузи мемы в папку",
-                            input_message_content=telebot.types.InputTextMessageContent(
-                                "😢 В папке нет мемов. Загрузи картинки через GitHub."
-                            )
-                        ))
-                except Exception as e:
-                    print(f"Ошибка мема в инлайн: {e}")
-    
-            # ========== RP В ИНЛАЙНЕ ==========
-            # Проверяем, похоже ли на RP-команду
-            rp_commands_list = [
-                "обнять", "согреть", "укрыть", "погладить", "пожалеть",
-                "налить_чай", "подарить_уют", "посветить", "заварить_кофе",
-                "укусить", "ударить", "задушить", "закидать_тапками",
-                "отправить_в_бан", "дать_леща", "загипнотизировать",
-                "обнять_со_спины", "сделать_комплимент", "испугать",
-                "кинуть_подушкой", "облить_водой", "защитить", "атаковать",
-                "исцелить", "воскресить", "подарить_тишину", "поделиться_светом",
-                "обнять_душой", "послать_лучики", "разделить_тишину"
-                ]
-            
-            for rp_cmd in rp_commands_list:
-                if rp_cmd in user_input and len(user_input.split()) <= 3:  # примерно "обнять @user"
-                    # Определяем, есть ли упоминание пользователя
-                    words = user_input.split()
-                    target = "пользователя"
-                    if len(words) > 1 and words[1].startswith('@'):
-                        target = words[1]
-                    
-                    # Выбираем случайную фразу (упрощённо)
-                    rp_phrases = [
-                        f"🤍 {rp_cmd} {target} с нежностью",
-                        f"✨ {rp_cmd} {target} от всей души",
-                        f"🫂 {rp_cmd} {target} в ответ",
-                        f"💫 {rp_cmd} {target} и улыбается"
-                    ]
-                    phrase = random.choice(rp_phrases)
-                    
-                    result_id += 1
-                    results.append(telebot.types.InlineQueryResultArticle(
-                        id=str(result_id),
-                        title=f"🤗 {rp_cmd} {target}",
-                        description=f"Выполнить RP-действие",
-                        input_message_content=telebot.types.InputTextMessageContent(
-                            phrase
-                        )
-                    ))
-    
-            # Если ничего не подошло — показываем помощь
-            if not results:
-                help_text = (
-                    "🤖 Доступные инлайн-команды:\n"
-                    "• @бот 2+2*2 — калькулятор\n"
-                    "• @бот шар вопрос? — магический шар\n"
-                    "• @бот монетка — орёл/решка\n"
-                    "• @бот рандом 1 10 — число\n"
-                    "• @бот факт — обычный факт\n"
-                    "• @бот жуткий факт — жуткий факт\n"
-                    "• @бот цитата — случайная цитата\n"
-                    "• @бот совет — полезный совет\n"
-                    "• @бот оправдание — оправдание\n"
-                    "• @бот мем — случайный мем\n"
-                    "• @бот обнять @user — RP-команды"
-                )
-                result_id += 1
-                results.append(telebot.types.InlineQueryResultArticle(
-                    id=str(result_id),
-                    title="❓ Помощь по инлайн-режиму",
-                    description="Что я умею в инлайн",
-                    input_message_content=telebot.types.InputTextMessageContent(
-                        help_text, parse_mode="Markdown"
-                    )
-                ))
-    
-            bot.answer_inline_query(query.id, results)
-    
-        except Exception as e:
-            print(f"Ошибка в инлайн-режиме: {e}")
-            try:
-                help_text = "❓ Используй @бот + запрос (например, @бот 2+2, @бот шар?, @бот мем)"
-                bot.answer_inline_query(query.id, [
-                    telebot.types.InlineQueryResultArticle(
-                        id='error',
-                        title="⚠️ Произошла ошибка",
-                        description=help_text,
-                        input_message_content=telebot.types.InputTextMessageContent(help_text)
-                    )
-                ])
-            except:
-                pass
-    # ========== КОНЕЦ ИНЛАЙН-РЕЖИМА ==========
 # ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ ТЕБЯ) ==========
 YOUR_USER_ID = 6001013593  # 👈 твой ID
 
@@ -5834,6 +5311,259 @@ def cmd_say(message):
         bot.reply_to(message, "✅ Сообщение отправлено в чат!")
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка при отправке: {e}")
+
+    # ========== СТАТИСТИКА (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ) ==========
+    import time
+    from datetime import datetime
+    
+    CREATOR_ID = 6001013593  # твой Telegram ID
+    
+    # Файлы для статистики
+    STATS_FILE = "stats.json"
+    USERS_STATS_FILE = "users_stats.json"
+    CHATS_STATS_FILE = "chats_stats.json"
+    HISTORY_FILE = "messages_history.json"
+    MAX_HISTORY = 50
+    
+    def load_json(file):
+        if os.path.exists(file):
+            with open(file, 'r') as f:
+                return json.load(f)
+        return {}
+    
+    def save_json(file, data):
+        with open(file, 'w') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    def update_stats(message):
+        """Обновляет статистику при каждом сообщении"""
+        try:
+            user_id = message.from_user.id
+            user_name = message.from_user.username or f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
+            chat_id = message.chat.id
+            chat_name = message.chat.title or "личка"
+            text = message.text or "[не текст]"
+            
+            # Общая статистика
+            stats = load_json(STATS_FILE)
+            if not stats:
+                stats = {"total_messages": 0, "total_users": 0, "total_chats": 0}
+            stats["total_messages"] = stats.get("total_messages", 0) + 1
+            
+            # Статистика пользователей
+            users_stats = load_json(USERS_STATS_FILE)
+            if str(user_id) not in users_stats:
+                users_stats[str(user_id)] = {
+                    "name": user_name,
+                    "first_seen": time.time(),
+                    "messages": 0,
+                    "chats": []
+                }
+                stats["total_users"] = len(users_stats)
+            
+            users_stats[str(user_id)]["messages"] += 1
+            users_stats[str(user_id)]["name"] = user_name
+            if str(chat_id) not in users_stats[str(user_id)]["chats"]:
+                users_stats[str(user_id)]["chats"].append(str(chat_id))
+            
+            # Статистика чатов
+            chats_stats = load_json(CHATS_STATS_FILE)
+            if str(chat_id) not in chats_stats:
+                chats_stats[str(chat_id)] = {
+                    "name": chat_name,
+                    "first_seen": time.time(),
+                    "messages": 0,
+                    "users": []
+                }
+                stats["total_chats"] = len(chats_stats)
+            
+            chats_stats[str(chat_id)]["messages"] += 1
+            chats_stats[str(chat_id)]["name"] = chat_name
+            if str(user_id) not in chats_stats[str(chat_id)]["users"]:
+                chats_stats[str(chat_id)]["users"].append(str(user_id))
+            
+            # Сохраняем всё
+            save_json(STATS_FILE, stats)
+            save_json(USERS_STATS_FILE, users_stats)
+            save_json(CHATS_STATS_FILE, chats_stats)
+            
+            # История сообщений
+            history = load_json(HISTORY_FILE)
+            if str(user_id) not in history:
+                history[str(user_id)] = []
+            
+            history[str(user_id)].append({
+                "time": time.time(),
+                "chat_id": chat_id,
+                "text": text[:200]
+            })
+            
+            if len(history[str(user_id)]) > MAX_HISTORY:
+                history[str(user_id)] = history[str(user_id)][-MAX_HISTORY:]
+            
+            save_json(HISTORY_FILE, history)
+            
+        except Exception as e:
+            print(f"Ошибка при сборе статистики: {e}")
+    
+    # ПЕРЕХВАТЧИК ДЛЯ СТАТИСТИКИ (В САМОМ КОНЦЕ, НЕ БЛОКИРУЕТ ДРУГИЕ КОМАНДЫ)
+    @bot.message_handler(func=lambda message: True, content_types=['text'])
+    def stats_collector(message):
+        update_stats(message)
+        # НЕТ RETURN — УПРАВЛЕНИЕ ИДЁТ ДАЛЬШЕ
+    
+    # ========== КОМАНДЫ СТАТИСТИКИ (ТОЛЬКО ДЛЯ ТЕБЯ) ==========
+    
+    @bot.message_handler(commands=['stats'])
+    def cmd_stats(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        
+        stats = load_json(STATS_FILE)
+        total_msgs = stats.get("total_messages", 0)
+        total_users = stats.get("total_users", 0)
+        total_chats = stats.get("total_chats", 0)
+        
+        reply = (
+            f"📊 **Статистика бота Revision**\n\n"
+            f"💬 Всего сообщений: {total_msgs}\n"
+            f"👥 Всего пользователей: {total_users}\n"
+            f"🏠 Всего чатов: {total_chats}\n\n"
+            f"📅 Данные с момента последнего деплоя"
+        )
+        bot.reply_to(message, reply, parse_mode='Markdown')
+    
+    @bot.message_handler(commands=['users'])
+    def cmd_users(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        
+        users_stats = load_json(USERS_STATS_FILE)
+        if not users_stats:
+            bot.reply_to(message, "📭 Нет данных о пользователях")
+            return
+        
+        sorted_users = sorted(users_stats.items(), key=lambda x: x[1].get("messages", 0), reverse=True)
+        
+        reply = "👥 **Список пользователей**\n\n"
+        for i, (uid, data) in enumerate(sorted_users[:20], 1):
+            name = data.get("name", "без имени")
+            msgs = data.get("messages", 0)
+            reply += f"{i}. {name} — {msgs} сообщ\n"
+        
+        if len(sorted_users) > 20:
+            reply += f"\n... и ещё {len(sorted_users) - 20} пользователей"
+        
+        bot.reply_to(message, reply, parse_mode='Markdown')
+    
+    @bot.message_handler(commands=['chats'])
+    def cmd_chats(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        
+        chats_stats = load_json(CHATS_STATS_FILE)
+        if not chats_stats:
+            bot.reply_to(message, "📭 Нет данных о чатах")
+            return
+        
+        sorted_chats = sorted(chats_stats.items(), key=lambda x: x[1].get("messages", 0), reverse=True)
+        
+        reply = "🏠 **Список чатов**\n\n"
+        for i, (cid, data) in enumerate(sorted_chats[:20], 1):
+            name = data.get("name", "без названия")
+            msgs = data.get("messages", 0)
+            reply += f"{i}. {name} — {msgs} сообщ\n"
+        
+        if len(sorted_chats) > 20:
+            reply += f"\n... и ещё {len(sorted_chats) - 20} чатов"
+        
+        bot.reply_to(message, reply, parse_mode='Markdown')
+    
+    @bot.message_handler(commands=['activity'])
+    def cmd_activity(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            bot.reply_to(message, "❌ Укажи пользователя: /activity @username")
+            return
+        
+        target = parts[1].strip().lstrip('@')
+        
+        users_stats = load_json(USERS_STATS_FILE)
+        found = None
+        for uid, data in users_stats.items():
+            name = data.get("name", "")
+            if target.lower() in name.lower():
+                found = (uid, data)
+                break
+        
+        if not found:
+            bot.reply_to(message, f"❌ Пользователь @{target} не найден")
+            return
+        
+        uid, data = found
+        name = data.get("name", "без имени")
+        msgs = data.get("messages", 0)
+        first_seen = data.get("first_seen", 0)
+        first_seen_str = datetime.fromtimestamp(first_seen).strftime('%d.%m.%Y %H:%M') if first_seen else "неизвестно"
+        
+        reply = (
+            f"📊 **Статистика пользователя**\n\n"
+            f"👤 Имя: {name}\n"
+            f"🆔 ID: `{uid}`\n"
+            f"💬 Сообщений: {msgs}\n"
+            f"📅 Первое появление: {first_seen_str}\n"
+            f"🏠 Чатов: {len(data.get('chats', []))}"
+        )
+        bot.reply_to(message, reply, parse_mode='Markdown')
+    
+    @bot.message_handler(commands=['history'])
+    def cmd_history(message):
+        if message.from_user.id != CREATOR_ID:
+            bot.reply_to(message, "🙄 Эй-эй-эй, вы не создатель вообще-то!")
+            return
+        
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            bot.reply_to(message, "❌ Укажи пользователя: /history @username")
+            return
+        
+        target = parts[1].strip().lstrip('@')
+        
+        users_stats = load_json(USERS_STATS_FILE)
+        found_uid = None
+        for uid, data in users_stats.items():
+            name = data.get("name", "")
+            if target.lower() in name.lower():
+                found_uid = uid
+                break
+        
+        if not found_uid:
+            bot.reply_to(message, f"❌ Пользователь @{target} не найден")
+            return
+        
+        history = load_json(HISTORY_FILE)
+        user_history = history.get(str(found_uid), [])
+        
+        if not user_history:
+            bot.reply_to(message, f"📭 Нет сохранённых сообщений от этого пользователя")
+            return
+        
+        reply = f"📜 **Последние сообщения от {target}**\n\n"
+        for msg in reversed(user_history[-10:]):
+            time_str = datetime.fromtimestamp(msg.get("time", 0)).strftime('%H:%M')
+            text = msg.get("text", "")[:50]
+            reply += f"`{time_str}` {text}\n"
+        
+        bot.reply_to(message, reply, parse_mode='Markdown')
+    # ========== КОНЕЦ СТАТИСТИКИ ==========
+
                 
 register_handlers()
 
