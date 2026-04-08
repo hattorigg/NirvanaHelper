@@ -5722,7 +5722,7 @@ def cmd_say(message):
         else:
             bot.reply_to(message, "🎤 Чтобы распознать голосовое, ответь на него командой /transcribe")
     
-    @bot.message_handler(commands=['transcribe', 'расшифруй'])
+    @bot.message_handler(commands=['transcribe', 'расшифруй','распознай'])
     def transcribe_command(message):
         if not message.reply_to_message:
             bot.reply_to(message, "❌ Ответь на голосовое сообщение командой /transcribe")
