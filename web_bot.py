@@ -9,7 +9,6 @@ import threading
 import requests
 import io
 import re
-import uuid
 from flask import Flask, request, abort
 # Создаём папку для кук g4f
 os.makedirs("har_and_cookies", exist_ok=True)
@@ -5708,39 +5707,13 @@ def cmd_say(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка при отправке: {e}")
 
-    # ========== РАСПОЗНАВАНИЕ ГОЛОСОВЫХ (SaluteSpeech) ==========
+    # ========== РАСПОЗНАВАНИЕ ГОЛОСОВЫХ (Hugging Face) ==========
     import requests
     import time
     import os
-    import subprocess
-    import base64
-    import uuid
     
-    # Твой Authorization key (замени на свой, если нужно)
-    AUTH_KEY = "MDE5ZDZjZDItOWIwZi03OTc5LWI1MGUtZjY4YWM0NWJhMDY0OmQxYjk1Yzc5LTkwY2MtNDA4Zi04MTg0LWU2MGQzYTExNmE2Nw=="
-    
-    def get_access_token():
-        """Получает временный Access Token по Authorization key"""
-        url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-        headers = {
-            'Authorization': f'Basic {AUTH_KEY}',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json',
-            'RqUID': str(uuid.uuid4())
-        }
-        data = {'scope': 'SALUTE_SPEECH_PERS'}
-        
-        try:
-            response = requests.post(url, headers=headers, data=data)
-            if response.status_code == 200:
-                token_data = response.json()
-                return token_data.get('access_token')
-            else:
-                print(f"Ошибка получения токена: {response.text}")
-                return None
-        except Exception as e:
-            print(f"Ошибка: {e}")
-            return None
+    HF_API_KEY = os.environ.get('HUGGINGFACE_API_KEY')
+    HF_MODEL = "openai/whisper-tiny"  # маленькая, быстрая модель, работает с OGG
     
     @bot.message_handler(content_types=['voice'])
     def handle_voice(message):
@@ -5765,16 +5738,14 @@ def cmd_say(message):
     def process_voice(voice_message, reply_chat_id=None):
         chat_id = reply_chat_id or voice_message.chat.id
         
-        # Получаем токен доступа
-        access_token = get_access_token()
-        if not access_token:
-            bot.send_message(chat_id, "❌ Не удалось получить токен доступа к API Сбера")
+        if not HF_API_KEY:
+            bot.send_message(chat_id, "❌ API ключ Hugging Face не настроен. Добавь HUGGINGFACE_API_KEY в Render.")
             return
         
         bot.send_chat_action(chat_id, 'typing')
         
         try:
-            # Скачиваем голосовое
+            # Скачиваем голосовое от Telegram
             file_info = bot.get_file(voice_message.voice.file_id)
             file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
             
@@ -5783,39 +5754,23 @@ def cmd_say(message):
                 bot.send_message(chat_id, "❌ Не удалось скачать голосовое сообщение")
                 return
             
+            # Сохраняем временно
             temp_ogg = f"/tmp/voice_{voice_message.from_user.id}.ogg"
             with open(temp_ogg, 'wb') as f:
                 f.write(resp.content)
             
-            # Конвертируем в WAV (SaluteSpeech ожидает WAV)
-            temp_wav = f"/tmp/voice_{voice_message.from_user.id}.wav"
-            try:
-                subprocess.run([
-                    'ffmpeg', '-i', temp_ogg,
-                    '-acodec', 'pcm_s16le',
-                    '-ar', '16000',
-                    '-ac', '1',
-                    temp_wav
-                ], check=True, capture_output=True)
-                audio_path = temp_wav
-            except:
-                audio_path = temp_ogg
+            # Отправляем в Hugging Face (модель принимает OGG)
+            API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+            headers = {"Authorization": f"Bearer {HF_API_KEY}"}
             
-            # Отправляем запрос на распознавание
-            url = "https://smartspeech.sber.ru/rest/v1/speech:recognize"
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "audio/x-wav"
-            }
-            
-            with open(audio_path, 'rb') as f:
+            with open(temp_ogg, 'rb') as f:
                 audio_data = f.read()
             
-            response = requests.post(url, headers=headers, data=audio_data, timeout=30)
+            response = requests.post(API_URL, headers=headers, data=audio_data, timeout=60)
             
             if response.status_code == 200:
                 result = response.json()
-                text = result.get("result", "").strip()
+                text = result.get('text', '').strip()
                 if text:
                     user_name = voice_message.from_user.first_name
                     bot.send_message(
@@ -5823,14 +5778,13 @@ def cmd_say(message):
                         f"🎤 Расшифровка от {user_name}:\n\n{text}"
                     )
                 else:
-                    bot.send_message(chat_id, "❌ Не удалось распознать речь")
+                    bot.send_message(chat_id, "❌ Не удалось распознать речь (текст пустой)")
             else:
                 bot.send_message(chat_id, f"❌ Ошибка API: {response.status_code}")
             
-            # Удаляем временные файлы
-            for path in [temp_ogg, temp_wav]:
-                if os.path.exists(path):
-                    os.remove(path)
+            # Удаляем временный файл
+            if os.path.exists(temp_ogg):
+                os.remove(temp_ogg)
                     
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка: {str(e)[:100]}")
