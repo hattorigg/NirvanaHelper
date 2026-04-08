@@ -4748,24 +4748,24 @@ def register_handlers():
         "12x8": {"rows": 12, "cols": 8, "win_len": 5},
     }
     
-    # ЭФФЕКТЫ
+    # ЭФФЕКТЫ (общий шанс ~20%, редкие 1-2%)
     SPECIAL_EFFECTS = [
-        {"name": "🌪️ Ветер", "effect": "wind", "desc": "Перемешивает поле", "chance": 0.12},
-        {"name": "❄️ Заморозка", "effect": "freeze", "desc": "Пропуск хода", "chance": 0.10},
-        {"name": "🐞 Баг", "effect": "bug", "desc": "Захват клетки", "chance": 0.09},
-        {"name": "☀️ Солнце", "effect": "sun", "desc": "Удаление фигуры", "chance": 0.09},
-        {"name": "🌙 Луна", "effect": "moon", "desc": "Обмен фигур", "chance": 0.08},
-        {"name": "💥 Взрыв", "effect": "explosion", "desc": "Уничтожение 3 клеток", "chance": 0.06},
-        {"name": "🌀 Водоворот", "effect": "whirlpool", "desc": "Сдвиг поля", "chance": 0.06},
-        {"name": "⚡ Доп. ход", "effect": "extra_turn", "desc": "Дополнительный ход", "chance": 0.04},
-        {"name": "🛡️ Защита", "effect": "shield", "desc": "Блок эффекта", "chance": 0.04},
-        {"name": "🎁 Сюрприз", "effect": "surprise", "desc": "Случайный эффект", "chance": 0.04},
-        {"name": "🕯️ Проклятие", "effect": "curse", "desc": "Исчезновение фигуры", "chance": 0.02},
-        {"name": "🌟 Благословение", "effect": "blessing", "desc": "Двойная фигура", "chance": 0.02},
-        {"name": "💀 Смерть", "effect": "death", "desc": "Уничтожает все фигуры противника", "chance": 0.01},
-        {"name": "🌀 Хаос", "effect": "chaos", "desc": "Полностью случайное поле", "chance": 0.01},
+        {"name": "🌪️ Ветер", "effect": "wind", "desc": "Перемешивает поле", "chance": 0.05},
+        {"name": "❄️ Заморозка", "effect": "freeze", "desc": "Пропуск хода", "chance": 0.04},
+        {"name": "🐞 Баг", "effect": "bug", "desc": "Захват клетки", "chance": 0.03},
+        {"name": "☀️ Солнце", "effect": "sun", "desc": "Удаление фигуры", "chance": 0.03},
+        {"name": "🌙 Луна", "effect": "moon", "desc": "Обмен фигур", "chance": 0.02},
+        {"name": "💥 Взрыв", "effect": "explosion", "desc": "Уничтожение 3 клеток", "chance": 0.01},
+        {"name": "🌀 Водоворот", "effect": "whirlpool", "desc": "Сдвиг поля", "chance": 0.01},
+        {"name": "⚡ Доп. ход", "effect": "extra_turn", "desc": "Дополнительный ход", "chance": 0.005},
+        {"name": "🛡️ Защита", "effect": "shield", "desc": "Блок эффекта", "chance": 0.005},
+        {"name": "🎁 Сюрприз", "effect": "surprise", "desc": "Случайный эффект", "chance": 0.005},
+        {"name": "🕯️ Проклятие", "effect": "curse", "desc": "Исчезновение фигуры", "chance": 0.002},
+        {"name": "🌟 Благословение", "effect": "blessing", "desc": "Двойная фигура", "chance": 0.002},
+        {"name": "💀 Смерть", "effect": "death", "desc": "Уничтожает все фигуры противника", "chance": 0.001},
+        {"name": "🌀 Хаос", "effect": "chaos", "desc": "Полностью случайное поле", "chance": 0.001},
     ]
-    
+
     def create_board(rows, cols):
         return [[" " for _ in range(cols)] for _ in range(rows)]
     
@@ -5113,20 +5113,20 @@ def register_handlers():
             "• 5×5 — победа за 4 в ряд\n"
             "• 12×8 — победа за 5 в ряд\n\n"
             "✨ Магические эффекты (шанс выпадения после хода):\n"
-            "• 🌪️ Ветер (12%) — перемешивает поле\n"
-            "• ❄️ Заморозка (10%) — пропуск хода\n"
-            "• 🐞 Баг (9%) — захват клетки\n"
-            "• ☀️ Солнце (9%) — удаление фигуры\n"
-            "• 🌙 Луна (8%) — обмен фигур\n"
-            "• 💥 Взрыв (6%) — уничтожение 3 клеток\n"
-            "• 🌀 Водоворот (6%) — сдвиг поля\n"
-            "• ⚡ Доп. ход (4%) — дополнительный ход\n"
-            "• 🛡️ Защита (4%) — блок эффекта\n"
-            "• 🎁 Сюрприз (4%) — случайный эффект\n"
-            "• 🕯️ Проклятие (2%) — исчезновение фигуры\n"
-            "• 🌟 Благословение (2%) — двойная фигура\n"
-            "• 💀 Смерть (1%) — уничтожает все фигуры противника\n"
-            "• 🌀 Хаос (1%) — полностью случайное поле\n\n"
+            "• 🌪️ Ветер (3-5%) — перемешивает поле\n"
+            "• ❄️ Заморозка (3-5%) — пропуск хода\n"
+            "• 🐞 Баг (20%) — захват клетки\n"
+            "• ☀️ Солнце (20%) — удаление фигуры\n"
+            "• 🌙 Луна (20%) — обмен фигур\n"
+            "• 💥 Взрыв (1%) — уничтожение 3 клеток\n"
+            "• 🌀 Водоворот (1%) — сдвиг поля\n"
+            "• ⚡ Доп. ход (0.5%) — дополнительный ход\n"
+            "• 🛡️ Защита (0.5%) — блок эффекта\n"
+            "• 🎁 Сюрприз (0.5%) — случайный эффект\n"
+            "• 🕯️ Проклятие (0.2%) — исчезновение фигуры\n"
+            "• 🌟 Благословение (0.2%) — двойная фигура\n"
+            "• 💀 Смерть (0.1%) — уничтожает все фигуры противника\n"
+            "• 🌀 Хаос (0.1%) — полностью случайное поле\n\n"
             "🎲 Как играть: нажимай на клетки\n"
             "❌ — крестики (ходит первый)\n"
             "⭕ — нолики (ходит второй)\n\n"
@@ -5325,6 +5325,91 @@ def register_handlers():
             reply += f"<code>{time_str}</code> {text}\n"
         bot.reply_to(message, reply, parse_mode='HTML')
     # ========== КОНЕЦ СТАТИСТИКИ ==========     
+
+    # ========== СТАТУС БОТА (КРАСИВАЯ ВЕРСИЯ) ==========
+    import time
+    from datetime import datetime
+    
+    bot_start_time = time.time()
+    
+    def format_uptime(seconds):
+        days = int(seconds // 86400)
+        hours = int((seconds % 86400) // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        if days > 0:
+            return f"{days}д {hours}ч {minutes}м {secs}с"
+        elif hours > 0:
+            return f"{hours}ч {minutes}м {secs}с"
+        elif minutes > 0:
+            return f"{minutes}м {secs}с"
+        else:
+            return f"{secs}с"
+    
+    def get_load_bar(percent, width=20):
+        filled = int(width * percent / 100)
+        empty = width - filled
+        bar = "█" * filled + "░" * empty
+        return bar
+    
+    def get_cpu_bar():
+        # Имитация загрузки CPU (для красоты)
+        levels = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+        return "".join(random.choice(levels) for _ in range(15))
+    
+    def get_fancy_percent():
+        # Красивые проценты с плавающей запятой
+        return round(random.uniform(12.5, 98.5), 1)
+    
+    @bot.message_handler(commands=['status'])
+    def cmd_status(message):
+        uptime_seconds = time.time() - bot_start_time
+        uptime_str = format_uptime(uptime_seconds)
+        
+        # Симуляция загруженности (для красоты)
+        system_load = random.randint(8, 45)
+        memory_load = random.randint(15, 60)
+        network_load = random.randint(5, 35)
+        cpu_load = random.randint(10, 55)
+        
+        system_bar = get_load_bar(system_load)
+        memory_bar = get_load_bar(memory_load)
+        network_bar = get_load_bar(network_load)
+        cpu_bar_visual = get_cpu_bar()
+        
+        # Случайный комментарий
+        status_comments = [
+            "✨ Всё течёт, всё меняется",
+            "🌙 Тишина. Код. Кофе",
+            "⚡ Энергия на исходе... шучу, полный порядок",
+            "🍃 Легко, как утренний бриз",
+            "🔥 Нагружен, но держу марку",
+            "💫 Летаю между запросами",
+            "🕯️ Уютно и спокойно",
+            "🧠 Процессор не курит, отдыхает",
+            "🎲 Готов к любым командам",
+            "☕ Чайник закипает, бот работает"
+        ]
+        comment = random.choice(status_comments)
+        
+        # Случайный процент "вдохновения"
+        inspiration = get_fancy_percent()
+        
+        reply = (
+            f"<b>🤖 Revision — статус</b>\n\n"
+            f"<b>🕒 Время жизни:</b> {uptime_str}\n\n"
+            f"<b>📈 Система:</b>\n"
+            f"<code>Загрузка    [{system_bar}] {system_load}%</code>\n"
+            f"<code>Память      [{memory_bar}] {memory_load}%</code>\n"
+            f"<code>Сеть        [{network_bar}] {network_load}%</code>\n"
+            f"<code>Процессор   {cpu_bar_visual} {cpu_load}%</code>\n\n"
+            f"<b>🧠 Вдохновение:</b> {inspiration}%\n\n"
+            f"<i>{comment}</i>\n\n"
+            f"<code>Все системы в порядке. Жду команд.</code>"
+        )
+        bot.reply_to(message, reply, parse_mode='HTML')
+    # ========== КОНЕЦ СТАТУСА ==========    
 
     # ========== КВЕСТЫ (РАБОЧАЯ ВЕРСИЯ) ==========
     STORY_FILE = "story_states.json"
