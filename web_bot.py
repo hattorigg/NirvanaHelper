@@ -4923,7 +4923,6 @@ def register_handlers():
             bot.reply_to(message, "🎮 Игра уже идёт! Используй /reset_xo")
             return
         
-        # Выбор размера
         size_markup = InlineKeyboardMarkup(row_width=3)
         size_markup.add(
             InlineKeyboardButton("3×3", callback_data=f"size_3x3_{chat_id}"),
@@ -4940,7 +4939,6 @@ def register_handlers():
         size = SIZES[size_key]
         rows, cols, win_len = size["rows"], size["cols"], size["win_len"]
         
-        # Выбор режима
         mode_markup = InlineKeyboardMarkup(row_width=2)
         mode_markup.add(
             InlineKeyboardButton("🎲 Обычный", callback_data=f"mode_normal_{chat_id}_{rows}_{cols}_{win_len}"),
@@ -4976,7 +4974,6 @@ def register_handlers():
         }
         
         if call.message.chat.type == "private":
-            # В личке — предложить игру с ботом
             opponent_markup = InlineKeyboardMarkup(row_width=2)
             opponent_markup.add(
                 InlineKeyboardButton("👥 С человеком", callback_data=f"opponent_human_{chat_id}"),
@@ -4985,7 +4982,6 @@ def register_handlers():
             text = f"🎮 Крестики-нолики {rows}×{cols}\nПобеда: {win_len} в ряд\n\n{board_text}\n\nИгрок 1: {call.from_user.first_name} (❌)\nВыбери противника:"
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=opponent_markup)
         else:
-            # В группе — только с человеком
             markup = InlineKeyboardMarkup()
             markup.add(InlineKeyboardButton("🤝 Присоединиться", callback_data=f"join_{chat_id}"))
             text = f"🎮 Крестики-нолики {rows}×{cols}\nПобеда: {win_len} в ряд\n\n{board_text}\n\nИгрок 1: {call.from_user.first_name} (❌)\nОжидание второго игрока..."
@@ -5019,7 +5015,6 @@ def register_handlers():
             )
             bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
         else:
-            # С человеком — ждём присоединения
             markup = InlineKeyboardMarkup()
             markup.add(InlineKeyboardButton("🤝 Присоединиться", callback_data=f"join_{chat_id}"))
             board_text = format_board(game["board"], game["rows"], game["cols"])
@@ -5135,7 +5130,6 @@ def register_handlers():
             effect_text += "\n⚡ Дополнительный ход!"
             game["current"] = user_id
         
-        # Если игра с ботом и сейчас ход бота
         if game["players"][1] == "bot" and game["current"] == "bot":
             bot_move(game, rows, cols)
             board_text = format_board(game["board"], rows, cols)
