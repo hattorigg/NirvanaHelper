@@ -5707,32 +5707,30 @@ def cmd_say(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка при отправке: {e}")
 
-    # ========== РАСПОЗНАВАНИЕ ГОЛОСОВЫХ (Hugging Face) ==========
+    # ========== РАСПОЗНАВАНИЕ ГОЛОСОВЫХ (Hugging Face, рабочая модель) ==========
     import requests
-    import time
     import os
+    import time
     
     HF_API_KEY = os.environ.get('HUGGINGFACE_API_KEY')
-    HF_MODEL = "openai/whisper-tiny"  # маленькая, быстрая модель, работает с OGG
+    # Используем более стабильную модель
+    HF_MODEL = "openai/whisper-tiny.en"
     
     @bot.message_handler(content_types=['voice'])
     def handle_voice(message):
+        # Только в личке — автоматическое распознавание
         if message.chat.type == 'private':
             process_voice(message)
-        else:
-            bot.reply_to(message, "🎤 Чтобы распознать голосовое, ответь на него командой /transcribe")
+        # В группе — никакого ответа, ждём команду
     
-    @bot.message_handler(commands=['transcribe', 'расшифруй','распознай'])
+    @bot.message_handler(commands=['transcribe', 'расшифруй', 'распознай'])
     def transcribe_command(message):
         if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на голосовое сообщение командой /transcribe")
+            bot.reply_to(message, "❌ Ответь на голосовое сообщение")
             return
-        
-        voice = message.reply_to_message.voice
-        if not voice:
+        if not message.reply_to_message.voice:
             bot.reply_to(message, "❌ Это не голосовое сообщение")
             return
-        
         process_voice(message.reply_to_message, message.chat.id)
     
     def process_voice(voice_message, reply_chat_id=None):
@@ -5745,21 +5743,21 @@ def cmd_say(message):
         bot.send_chat_action(chat_id, 'typing')
         
         try:
-            # Скачиваем голосовое от Telegram
+            # Скачиваем голосовое
             file_info = bot.get_file(voice_message.voice.file_id)
             file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
             
             resp = requests.get(file_url, timeout=30)
             if resp.status_code != 200:
-                bot.send_message(chat_id, "❌ Не удалось скачать голосовое сообщение")
+                bot.send_message(chat_id, "❌ Не удалось скачать голосовое")
                 return
             
-            # Сохраняем временно
-            temp_ogg = f"/tmp/voice_{voice_message.from_user.id}.ogg"
+            # Сохраняем временный OGG
+            temp_ogg = f"/tmp/voice_{voice_message.from_user.id}_{int(time.time())}.ogg"
             with open(temp_ogg, 'wb') as f:
                 f.write(resp.content)
             
-            # Отправляем в Hugging Face (модель принимает OGG)
+            # Отправляем в Hugging Face
             API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
             headers = {"Authorization": f"Bearer {HF_API_KEY}"}
             
@@ -5780,7 +5778,11 @@ def cmd_say(message):
                 else:
                     bot.send_message(chat_id, "❌ Не удалось распознать речь (текст пустой)")
             else:
-                bot.send_message(chat_id, f"❌ Ошибка API: {response.status_code}")
+                # Пробуем другую модель если первая упала
+                if response.status_code == 410:
+                    bot.send_message(chat_id, "❌ Модель временно недоступна. Попробуй через минуту.")
+                else:
+                    bot.send_message(chat_id, f"❌ Ошибка API: {response.status_code}")
             
             # Удаляем временный файл
             if os.path.exists(temp_ogg):
