@@ -4735,7 +4735,7 @@ def register_handlers():
             return revision["user_names"][str(user_id)]
         return default_name
 
-    # ========== КРЕСТИКИ-НОЛИКИ 8×12 ==========
+    # ========== КРЕСТИКИ-НОЛИКИ 8×12 (С БОТОМ В ЛС) ==========
     import random
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
@@ -4744,17 +4744,46 @@ def register_handlers():
     COLS = 8
     WIN_LEN = 5
     
+    # 8 ТЕМ
+    FIELD_THEMES = {
+        1: {"name": "🌑 Тёмный", "empty": "□", "x": "❌", "o": "⭕"},
+        2: {"name": "🌸 Цветочный", "empty": "□", "x": "❌", "o": "⭕"},
+        3: {"name": "⭐ Звёздный", "empty": "□", "x": "❌", "o": "⭕"},
+        4: {"name": "🌲 Лесной", "empty": "□", "x": "❌", "o": "⭕"},
+        5: {"name": "🌊 Водный", "empty": "□", "x": "❌", "o": "⭕"},
+        6: {"name": "🔥 Неон", "empty": "□", "x": "❌", "o": "⭕"},
+        7: {"name": "🍰 Уют", "empty": "□", "x": "❌", "o": "⭕"},
+        8: {"name": "🪐 Космос", "empty": "□", "x": "❌", "o": "⭕"},
+    }
+    
+    # ЭФФЕКТЫ
+    SPECIAL_EFFECTS = [
+        {"name": "🌪️ Ветер", "effect": "wind", "desc": "Перемешивает поле", "chance": 0.15},
+        {"name": "❄️ Заморозка", "effect": "freeze", "desc": "Пропуск хода", "chance": 0.10},
+        {"name": "🐞 Баг", "effect": "bug", "desc": "Захват клетки", "chance": 0.08},
+        {"name": "☀️ Солнце", "effect": "sun", "desc": "Удаление фигуры", "chance": 0.08},
+        {"name": "🌙 Луна", "effect": "moon", "desc": "Обмен фигур", "chance": 0.07},
+        {"name": "💥 Взрыв", "effect": "explosion", "desc": "Уничтожение 3 клеток", "chance": 0.05},
+        {"name": "🌀 Водоворот", "effect": "whirlpool", "desc": "Сдвиг поля", "chance": 0.05},
+        {"name": "⚡ Доп. ход", "effect": "extra_turn", "desc": "Дополнительный ход", "chance": 0.04},
+        {"name": "🛡️ Защита", "effect": "shield", "desc": "Блок эффекта", "chance": 0.04},
+        {"name": "🎁 Сюрприз", "effect": "surprise", "desc": "Случайный эффект", "chance": 0.04},
+        {"name": "🕯️ Проклятие", "effect": "curse", "desc": "Исчезновение фигуры", "chance": 0.02},
+        {"name": "🌟 Благословение", "effect": "blessing", "desc": "Двойная фигура", "chance": 0.02},
+    ]
+    
     def create_board():
         return [[" " for _ in range(COLS)] for _ in range(ROWS)]
     
-    def format_board(board):
+    def format_board(board, theme):
+        empty = theme["empty"]
         result = ""
         for i in range(ROWS):
             row = ""
             for j in range(COLS):
                 cell = board[i][j]
                 if cell == " ":
-                    row += "□"
+                    row += empty
                 elif cell == "❌":
                     row += "❌"
                 else:
@@ -4800,6 +4829,89 @@ def register_handlers():
                     return True
         return False
     
+    def apply_effect(board, rows, cols, player_symbol, effect):
+        if effect == "wind":
+            flat = [cell for row in board for cell in row if cell != " "]
+            random.shuffle(flat)
+            idx = 0
+            for i in range(rows):
+                for j in range(cols):
+                    if board[i][j] != " ":
+                        board[i][j] = flat[idx]
+                        idx += 1
+            return "🌪️ Ветер перемешал поле!"
+        elif effect == "freeze":
+            return "❄️ Заморозка! Следующий ход противника пропущен."
+        elif effect == "extra_turn":
+            return "⚡ Дополнительный ход! Ты ходишь ещё раз."
+        elif effect == "bug":
+            targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
+            if targets:
+                i,j = random.choice(targets)
+                board[i][j] = player_symbol
+                return "🐞 Баг! Клетка противника стала твоей!"
+            return "🐞 Баг не сработал"
+        elif effect == "sun":
+            targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
+            if targets:
+                i,j = random.choice(targets)
+                board[i][j] = " "
+                return "☀️ Солнечный удар! Фигура противника исчезла!"
+            return "☀️ Нет целей"
+        elif effect == "moon":
+            cells = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] != " "]
+            if len(cells) >= 2:
+                a,b = random.sample(cells, 2)
+                board[a[0]][a[1]], board[b[0]][b[1]] = board[b[0]][b[1]], board[a[0]][a[1]]
+                return "🌙 Лунное затмение поменяло фигуры местами!"
+            return "🌙 Недостаточно фигур"
+        elif effect == "explosion":
+            targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
+            if targets:
+                for _ in range(min(3, len(targets))):
+                    i,j = random.choice(targets)
+                    board[i][j] = " "
+                    targets.remove((i,j))
+                return "💥 Взрыв уничтожил вражеские фигуры!"
+            return "💥 Нет целей"
+        elif effect == "whirlpool":
+            flat = [cell for row in board for cell in row]
+            if flat:
+                flat = [flat[-1]] + flat[:-1]
+                idx = 0
+                for i in range(rows):
+                    for j in range(cols):
+                        board[i][j] = flat[idx]
+                        idx += 1
+                return "🌀 Водоворот сдвинул поле!"
+        elif effect == "surprise":
+            surprise_effects = ["wind", "freeze", "bug", "sun", "moon", "explosion", "whirlpool"]
+            return apply_effect(board, rows, cols, player_symbol, random.choice(surprise_effects))
+        elif effect == "curse":
+            targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
+            if targets:
+                i,j = random.choice(targets)
+                board[i][j] = " "
+                return "🕯️ Проклятие! Фигура противника исчезла."
+            return "🕯️ Проклятие не сработало"
+        elif effect == "blessing":
+            empty = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == " "]
+            if empty:
+                i,j = random.choice(empty)
+                board[i][j] = player_symbol
+                return "🌟 Благословение! Твоя фигура появилась на поле ещё раз."
+            return "🌟 Благословение не сработало"
+        return "✨ Эффект сработал!"
+    
+    def bot_move(game):
+        """Случайный ход бота (простой ИИ)"""
+        empty = [(i,j) for i in range(ROWS) for j in range(COLS) if game["board"][i][j] == " "]
+        if empty:
+            i,j = random.choice(empty)
+            game["board"][i][j] = "⭕"
+            return True
+        return False
+    
     @bot.message_handler(commands=['xo'])
     def cmd_xo(message):
         chat_id = message.chat.id
@@ -4807,28 +4919,75 @@ def register_handlers():
             bot.reply_to(message, "🎮 Игра уже идёт! Используй /reset_xo")
             return
         
+        # В личке — предложить игру с ботом
+        if message.chat.type == "private":
+            markup = InlineKeyboardMarkup(row_width=2)
+            markup.add(
+                InlineKeyboardButton("👥 С человеком", callback_data=f"mode_human_{chat_id}"),
+                InlineKeyboardButton("🤖 С ботом", callback_data=f"mode_bot_{chat_id}")
+            )
+            bot.reply_to(message, "🎮 Выбери режим игры:", reply_markup=markup)
+            return
+        
+        # В группе — сразу с человеком
+        start_game(message, chat_id, "human", message.from_user.id, message.from_user.first_name)
+    
+    def start_game(message, chat_id, mode, player_id, player_name):
         board = create_board()
+        theme = random.choice(list(FIELD_THEMES.values()))
+        
         ttt_games[chat_id] = {
             "board": board,
-            "players": [message.from_user.id, None],
-            "current": message.from_user.id,
-            "names": [message.from_user.first_name, None],
-            "message_id": None
+            "mode": mode,
+            "players": [player_id, None],
+            "current": player_id,
+            "names": [player_name, None],
+            "theme": theme,
+            "message_id": None,
+            "freeze": False,
+            "extra_turn": False
         }
         
-        board_text = format_board(board)
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🤝 Присоединиться", callback_data=f"ttt_join_{chat_id}"))
+        if mode == "bot":
+            ttt_games[chat_id]["players"][1] = "bot"
+            ttt_games[chat_id]["names"][1] = "Бот"
         
-        text = (
-            f"🎮 Крестики-нолики 8×12\n"
-            f"Победа: {WIN_LEN} в ряд\n\n"
-            f"{board_text}\n\n"
-            f"Игрок 1: {message.from_user.first_name} (❌)\n"
-            f"Ожидание второго игрока..."
-        )
-        sent = bot.reply_to(message, text, reply_markup=markup)
+        board_text = format_board(board, theme)
+        
+        if mode == "human" and chat_id not in [message.chat.id for message in []]:
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("🤝 Присоединиться", callback_data=f"ttt_join_{chat_id}"))
+            text = (
+                f"🎮 Крестики-нолики 8×12\n"
+                f"Победа: {WIN_LEN} в ряд\n"
+                f"Стиль: {theme['name']}\n\n"
+                f"{board_text}\n\n"
+                f"Игрок 1: {player_name} (❌)\n"
+                f"Ожидание второго игрока..."
+            )
+            sent = bot.reply_to(message, text, reply_markup=markup)
+        else:
+            keyboard = create_keyboard(board, chat_id)
+            text = (
+                f"🎮 Крестики-нолики 8×12\n"
+                f"Победа: {WIN_LEN} в ряд\n"
+                f"Стиль: {theme['name']}\n\n"
+                f"{board_text}\n\n"
+                f"❌ {player_name}\n"
+                f"⭕ {'Бот' if mode == 'bot' else 'Ожидание'}\n\n"
+                f"Ход: {player_name} (❌)"
+            )
+            sent = bot.reply_to(message, text, reply_markup=keyboard)
+        
         ttt_games[chat_id]["message_id"] = sent.message_id
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('mode_'))
+    def choose_mode(call):
+        chat_id = int(call.data.split('_')[2])
+        mode = call.data.split('_')[1]
+        
+        start_game(call.message, chat_id, mode, call.from_user.id, call.from_user.first_name)
+        bot.answer_callback_query(call.id)
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith('ttt_join_'))
     def join_game(call):
@@ -4850,12 +5009,13 @@ def register_handlers():
         game["players"][1] = call.from_user.id
         game["names"][1] = call.from_user.first_name
         
-        board_text = format_board(game["board"])
+        board_text = format_board(game["board"], game["theme"])
         keyboard = create_keyboard(game["board"], chat_id)
         
         text = (
             f"🎮 Крестики-нолики 8×12\n"
-            f"Победа: {WIN_LEN} в ряд\n\n"
+            f"Победа: {WIN_LEN} в ряд\n"
+            f"Стиль: {game['theme']['name']}\n\n"
             f"{board_text}\n\n"
             f"❌ {game['names'][0]}\n"
             f"⭕ {game['names'][1]}\n\n"
@@ -4878,7 +5038,8 @@ def register_handlers():
         game = ttt_games[chat_id]
         user_id = call.from_user.id
         
-        if game["players"][1] is None:
+        # Проверка очереди и участия
+        if game["mode"] == "human" and game["players"][1] is None:
             bot.answer_callback_query(call.id, "❌ Второй игрок ещё не присоединился", show_alert=True)
             return
         
@@ -4896,8 +5057,9 @@ def register_handlers():
         
         player_symbol = "❌" if user_id == game["players"][0] else "⭕"
         game["board"][row][col] = player_symbol
-        board_text = format_board(game["board"])
+        board_text = format_board(game["board"], game["theme"])
         
+        # Проверка победы
         if check_win(game["board"], player_symbol):
             winner_name = game["names"][0] if player_symbol == "❌" else game["names"][1]
             text = f"🏆 ПОБЕДА! {winner_name} выиграл!\n\n{board_text}\n\nНажми /xo чтобы сыграть снова."
@@ -4906,6 +5068,7 @@ def register_handlers():
             del ttt_games[chat_id]
             return
         
+        # Проверка ничьи
         if all(cell != " " for row in game["board"] for cell in row):
             text = f"🤝 НИЧЬЯ!\n\n{board_text}\n\nНажми /xo чтобы сыграть снова."
             bot.edit_message_text(text, chat_id, game["message_id"])
@@ -4913,7 +5076,53 @@ def register_handlers():
             del ttt_games[chat_id]
             return
         
-        game["current"] = game["players"][1] if user_id == game["players"][0] else game["players"][0]
+        # Эффекты в магическом режиме
+        effect_text = ""
+        if game.get("mode") == "magic":
+            roll = random.random()
+            cumsum = 0
+            for eff in SPECIAL_EFFECTS:
+                cumsum += eff["chance"]
+                if roll <= cumsum:
+                    effect_text = f"\n✨ {apply_effect(game['board'], ROWS, COLS, player_symbol, eff['effect'])}"
+                    board_text = format_board(game["board"], game["theme"])
+                    break
+        
+        # Меняем ход
+        if game.get("freeze"):
+            game["freeze"] = False
+            effect_text += "\n❄️ Ход противника пропущен"
+        else:
+            game["current"] = game["players"][1] if user_id == game["players"][0] else game["players"][0]
+        
+        if game.get("extra_turn"):
+            game["extra_turn"] = False
+            effect_text += "\n⚡ Дополнительный ход!"
+            game["current"] = user_id
+        
+        # Если игра с ботом и сейчас ход бота
+        if game["mode"] == "bot" and game["current"] == "bot":
+            bot_move(game)
+            board_text = format_board(game["board"], game["theme"])
+            
+            # Проверка победы бота
+            if check_win(game["board"], "⭕"):
+                text = f"🏆 ПОБЕДА! Бот выиграл!\n\n{board_text}\n\nНажми /xo чтобы сыграть снова."
+                bot.edit_message_text(text, chat_id, game["message_id"])
+                bot.answer_callback_query(call.id, "🤖 Бот победил!", show_alert=True)
+                del ttt_games[chat_id]
+                return
+            
+            # Проверка ничьи после хода бота
+            if all(cell != " " for row in game["board"] for cell in row):
+                text = f"🤝 НИЧЬЯ!\n\n{board_text}\n\nНажми /xo чтобы сыграть снова."
+                bot.edit_message_text(text, chat_id, game["message_id"])
+                bot.answer_callback_query(call.id, "🤝 Ничья!", show_alert=True)
+                del ttt_games[chat_id]
+                return
+            
+            game["current"] = game["players"][0]
+        
         current_name = game["names"][0] if game["current"] == game["players"][0] else game["names"][1]
         current_symbol = "❌" if game["current"] == game["players"][0] else "⭕"
         
@@ -4921,11 +5130,12 @@ def register_handlers():
         
         text = (
             f"🎮 Крестики-нолики 8×12\n"
-            f"Победа: {WIN_LEN} в ряд\n\n"
+            f"Победа: {WIN_LEN} в ряд\n"
+            f"Стиль: {game['theme']['name']}\n\n"
             f"{board_text}\n\n"
             f"❌ {game['names'][0]}\n"
             f"⭕ {game['names'][1]}\n\n"
-            f"Ход: {current_name} ({current_symbol})"
+            f"Ход: {current_name} ({current_symbol}){effect_text}"
         )
         bot.edit_message_text(text, chat_id, game["message_id"], reply_markup=keyboard)
         bot.answer_callback_query(call.id)
@@ -4945,6 +5155,7 @@ def register_handlers():
             "🎮 Крестики-нолики 8×12\n\n"
             "/xo — начать новую игру\n"
             "/reset_xo — сбросить текущую игру\n\n"
+            "В личных сообщениях можно играть с ботом 🤖\n\n"
             "Правила:\n"
             "• Поле 8×12 (8 клеток в ширину, 12 в высоту)\n"
             "• Победа: 5 в ряд\n"
