@@ -4735,29 +4735,41 @@ def register_handlers():
             return revision["user_names"][str(user_id)]
         return default_name
 
-    # ========== КРЕСТИКИ-НОЛИКИ 2.0 (РАБОЧАЯ ВЕРСИЯ) ==========
+    # ========== КРЕСТИКИ-НОЛИКИ (3×3, 5×5, 12×8, МАГИЯ) ==========
     import random
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
     ttt_games = {}
     
-    # ========== ЭФФЕКТЫ С РАЗНЫМИ ШАНСАМИ ==========
+    # РАЗМЕРЫ
+    SIZES = {
+        "3x3": {"rows": 3, "cols": 3, "win_len": 3},
+        "5x5": {"rows": 5, "cols": 5, "win_len": 4},
+        "12x8": {"rows": 12, "cols": 8, "win_len": 5},
+    }
+    
+    # ЭФФЕКТЫ
     SPECIAL_EFFECTS = [
-        {"name": "🌪️ Порыв ветра", "effect": "wind", "desc": "Перемешивает поле", "chance": 0.15},
-        {"name": "❄️ Заморозка", "effect": "freeze", "desc": "Пропускает ход противника", "chance": 0.10},
-        {"name": "🐞 Баг", "effect": "bug", "desc": "Заменяет клетку противника на твою", "chance": 0.08},
-        {"name": "☀️ Солнечный удар", "effect": "sun", "desc": "Убирает фигуру противника", "chance": 0.08},
-        {"name": "🌙 Лунное затмение", "effect": "moon", "desc": "Меняет фигуры местами", "chance": 0.07},
-        {"name": "💥 Взрыв", "effect": "explosion", "desc": "Уничтожает 3 клетки противника", "chance": 0.05},
-        {"name": "🌀 Водоворот", "effect": "whirlpool", "desc": "Сдвигает поле", "chance": 0.05},
-        {"name": "⚡ Дополнительный ход", "effect": "extra_turn", "desc": "Дополнительный ход", "chance": 0.04},
-        {"name": "🛡️ Защита", "effect": "shield", "desc": "Блокирует следующий эффект", "chance": 0.04},
+        {"name": "🌪️ Ветер", "effect": "wind", "desc": "Перемешивает поле", "chance": 0.12},
+        {"name": "❄️ Заморозка", "effect": "freeze", "desc": "Пропуск хода", "chance": 0.10},
+        {"name": "🐞 Баг", "effect": "bug", "desc": "Захват клетки", "chance": 0.09},
+        {"name": "☀️ Солнце", "effect": "sun", "desc": "Удаление фигуры", "chance": 0.09},
+        {"name": "🌙 Луна", "effect": "moon", "desc": "Обмен фигур", "chance": 0.08},
+        {"name": "💥 Взрыв", "effect": "explosion", "desc": "Уничтожение 3 клеток", "chance": 0.06},
+        {"name": "🌀 Водоворот", "effect": "whirlpool", "desc": "Сдвиг поля", "chance": 0.06},
+        {"name": "⚡ Доп. ход", "effect": "extra_turn", "desc": "Дополнительный ход", "chance": 0.04},
+        {"name": "🛡️ Защита", "effect": "shield", "desc": "Блок эффекта", "chance": 0.04},
         {"name": "🎁 Сюрприз", "effect": "surprise", "desc": "Случайный эффект", "chance": 0.04},
-        {"name": "🕯️ Проклятие", "effect": "curse", "desc": "Фигура противника исчезает", "chance": 0.02},
-        {"name": "🌟 Благословение", "effect": "blessing", "desc": "Твоя фигура появляется дважды", "chance": 0.02},
+        {"name": "🕯️ Проклятие", "effect": "curse", "desc": "Исчезновение фигуры", "chance": 0.02},
+        {"name": "🌟 Благословение", "effect": "blessing", "desc": "Двойная фигура", "chance": 0.02},
+        {"name": "💀 Смерть", "effect": "death", "desc": "Уничтожает все фигуры противника", "chance": 0.01},
+        {"name": "🌀 Хаос", "effect": "chaos", "desc": "Полностью случайное поле", "chance": 0.01},
     ]
     
-    def create_field_keyword(board, rows, cols, chat_id):
+    def create_board(rows, cols):
+        return [[" " for _ in range(cols)] for _ in range(rows)]
+    
+    def create_keyboard(board, rows, cols, chat_id):
         markup = InlineKeyboardMarkup(row_width=cols)
         for i in range(rows):
             row = []
@@ -4765,7 +4777,7 @@ def register_handlers():
                 cell = board[i][j]
                 if cell == " ":
                     text = "▪️"
-                    callback = f"ttt2_move_{chat_id}_{i}_{j}"
+                    callback = f"ttt_move_{chat_id}_{i}_{j}"
                 elif cell == "❌":
                     text = "❌"
                     callback = "noop"
@@ -4776,7 +4788,7 @@ def register_handlers():
             markup.row(*row)
         return markup
     
-    def check_win_condition(board, rows, cols, player, win_len):
+    def check_win(board, rows, cols, player, win_len):
         for i in range(rows):
             for j in range(cols - win_len + 1):
                 if all(board[i][j+k] == player for k in range(win_len)):
@@ -4795,6 +4807,9 @@ def register_handlers():
                     return True
         return False
     
+    def check_draw(board, rows, cols):
+        return all(cell != " " for row in board for cell in row)
+    
     def apply_effect(board, rows, cols, player_symbol, effect):
         if effect == "wind":
             flat = [cell for row in board for cell in row if cell != " "]
@@ -4806,13 +4821,10 @@ def register_handlers():
                         board[i][j] = flat[idx]
                         idx += 1
             return "🌪️ Ветер перемешал поле!"
-        
         elif effect == "freeze":
             return "❄️ Заморозка! Следующий ход противника пропущен."
-        
         elif effect == "extra_turn":
             return "⚡ Дополнительный ход! Ты ходишь ещё раз."
-        
         elif effect == "bug":
             targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
             if targets:
@@ -4820,7 +4832,6 @@ def register_handlers():
                 board[i][j] = player_symbol
                 return "🐞 Баг! Клетка противника стала твоей!"
             return "🐞 Баг не сработал"
-        
         elif effect == "sun":
             targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
             if targets:
@@ -4828,7 +4839,6 @@ def register_handlers():
                 board[i][j] = " "
                 return "☀️ Солнечный удар! Фигура противника исчезла!"
             return "☀️ Нет целей"
-        
         elif effect == "moon":
             cells = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] != " "]
             if len(cells) >= 2:
@@ -4836,7 +4846,6 @@ def register_handlers():
                 board[a[0]][a[1]], board[b[0]][b[1]] = board[b[0]][b[1]], board[a[0]][a[1]]
                 return "🌙 Лунное затмение поменяло фигуры местами!"
             return "🌙 Недостаточно фигур"
-        
         elif effect == "explosion":
             targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
             if targets:
@@ -4846,7 +4855,6 @@ def register_handlers():
                     targets.remove((i,j))
                 return "💥 Взрыв уничтожил вражеские фигуры!"
             return "💥 Нет целей"
-        
         elif effect == "whirlpool":
             flat = [cell for row in board for cell in row]
             if flat:
@@ -4857,14 +4865,9 @@ def register_handlers():
                         board[i][j] = flat[idx]
                         idx += 1
                 return "🌀 Водоворот сдвинул поле!"
-        
-        elif effect == "shield":
-            return "🛡️ Защита! Следующий эффект противника не сработает."
-        
         elif effect == "surprise":
             surprise_effects = ["wind", "freeze", "bug", "sun", "moon", "explosion", "whirlpool"]
             return apply_effect(board, rows, cols, player_symbol, random.choice(surprise_effects))
-        
         elif effect == "curse":
             targets = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == ("⭕" if player_symbol == "❌" else "❌")]
             if targets:
@@ -4872,7 +4875,6 @@ def register_handlers():
                 board[i][j] = " "
                 return "🕯️ Проклятие! Фигура противника исчезла."
             return "🕯️ Проклятие не сработало"
-        
         elif effect == "blessing":
             empty = [(i,j) for i in range(rows) for j in range(cols) if board[i][j] == " "]
             if empty:
@@ -4880,62 +4882,71 @@ def register_handlers():
                 board[i][j] = player_symbol
                 return "🌟 Благословение! Твоя фигура появилась на поле ещё раз."
             return "🌟 Благословение не сработало"
-        
+        elif effect == "death":
+            for i in range(rows):
+                for j in range(cols):
+                    if board[i][j] == ("⭕" if player_symbol == "❌" else "❌"):
+                        board[i][j] = " "
+            return "💀 Смерть уничтожила все фигуры противника!"
+        elif effect == "chaos":
+            for i in range(rows):
+                for j in range(cols):
+                    if board[i][j] != " ":
+                        board[i][j] = random.choice(["❌", "⭕"])
+            return "🌀 Хаос перетасовал все фигуры!"
         return "✨ Эффект сработал!"
     
-    @bot.message_handler(commands=['xo', 'ttt'])
-    def cmd_xo_new(message):
+    def bot_move(game, rows, cols):
+        empty = [(i,j) for i in range(rows) for j in range(cols) if game["board"][i][j] == " "]
+        if empty:
+            i,j = random.choice(empty)
+            game["board"][i][j] = "⭕"
+            return True
+        return False
+    
+    @bot.message_handler(commands=['xo'])
+    def cmd_xo(message):
         chat_id = message.chat.id
         if chat_id in ttt_games:
             bot.reply_to(message, "🎮 Игра уже идёт! Используй /reset_xo")
             return
         
-        markup = InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            InlineKeyboardButton("🎲 Обычный режим", callback_data=f"xo_mode_normal_{chat_id}"),
-            InlineKeyboardButton("✨ Магический режим", callback_data=f"xo_mode_cool_{chat_id}")
-        )
-        bot.reply_to(message, "🎮 **Выбери режим игры:**", reply_markup=markup, parse_mode='Markdown')
-    
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('xo_mode_'))
-    def xo_choose_mode(call):
-        chat_id = int(call.data.split('_')[3])
-        mode = call.data.split('_')[2]
-        
-        if chat_id != call.message.chat.id:
-            bot.answer_callback_query(call.id, "❌ Не тот чат")
-            return
-        
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
-            InlineKeyboardButton("3×3 (3 в ряд)", callback_data=f"xo_size_3_{mode}_{chat_id}"),
-            InlineKeyboardButton("5×5 (4 в ряд)", callback_data=f"xo_size_5_{mode}_{chat_id}"),
-            InlineKeyboardButton("8×12 (5 в ряд)", callback_data=f"xo_size_8x12_{mode}_{chat_id}")
+            InlineKeyboardButton("3×3", callback_data=f"size_3x3_{chat_id}"),
+            InlineKeyboardButton("5×5", callback_data=f"size_5x5_{chat_id}"),
+            InlineKeyboardButton("12×8", callback_data=f"size_12x8_{chat_id}")
         )
-        bot.edit_message_text("🎲 **Выбери размер поля:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+        bot.reply_to(message, "🎲 Выбери размер поля:", reply_markup=markup)
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('size_'))
+    def choose_size(call):
+        size_key = call.data.split('_')[1]
+        chat_id = int(call.data.split('_')[2])
+        
+        size = SIZES[size_key]
+        rows, cols, win_len = size["rows"], size["cols"], size["win_len"]
+        
+        mode_markup = InlineKeyboardMarkup(row_width=2)
+        mode_markup.add(
+            InlineKeyboardButton("🎲 Обычный", callback_data=f"mode_normal_{chat_id}_{rows}_{cols}_{win_len}"),
+            InlineKeyboardButton("✨ Магический", callback_data=f"mode_magic_{chat_id}_{rows}_{cols}_{win_len}")
+        )
+        bot.edit_message_text("🎮 Выбери режим игры:", call.message.chat.id, call.message.message_id, reply_markup=mode_markup)
         bot.answer_callback_query(call.id)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('xo_size_'))
-    def xo_create_game(call):
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('mode_'))
+    def choose_mode(call):
         data = call.data.split('_')
-        size_str = data[2]
-        mode = data[3]
-        chat_id = int(data[4])
+        mode = data[1]
+        chat_id = int(data[2])
+        rows = int(data[3])
+        cols = int(data[4])
+        win_len = int(data[5])
         
-        if chat_id != call.message.chat.id:
-            bot.answer_callback_query(call.id, "❌ Не тот чат")
-            return
+        board = create_board(rows, cols)
         
-        if size_str == "8x12":
-            rows, cols = 8, 12
-            win_len = 5
-        else:
-            rows = cols = int(size_str)
-            win_len = 3 if rows == 3 else 4
-        
-        board = [[" " for _ in range(cols)] for _ in range(rows)]
-        
-        game_data = {
+        ttt_games[chat_id] = {
             "board": board,
             "rows": rows,
             "cols": cols,
@@ -4943,199 +4954,186 @@ def register_handlers():
             "mode": mode,
             "players": [call.from_user.id, None],
             "current": call.from_user.id,
-            "player_names": [call.from_user.first_name, None],
+            "names": [call.from_user.first_name, None],
+            "message_id": None,
             "freeze": False,
             "extra_turn": False
         }
-        ttt_games[chat_id] = game_data
         
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🤝 Присоединиться", callback_data=f"xo_join2_{chat_id}_{rows}_{cols}_{win_len}_{mode}"))
+        markup.add(InlineKeyboardButton("🤝 Присоединиться", callback_data=f"join_{chat_id}"))
         
         text = (
-            f"🎮 **Крестики-нолики**\n"
-            f"Размер: {rows}×{cols}\n"
-            f"Режим: {'✨ Магический' if mode == 'cool' else '🎲 Обычный'}\n"
-            f"Для победы нужно {win_len} в ряд.\n\n"
+            f"🎮 Крестики-нолики {rows}x{cols}\n"
+            f"Победа: {win_len} в ряд\n"
+            f"Режим: {'Магический ✨' if mode == 'magic' else 'Обычный 🎲'}\n\n"
             f"Игрок 1: {call.from_user.first_name} (❌)\n"
             f"Ожидание второго игрока..."
         )
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+        sent = bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+        ttt_games[chat_id]["message_id"] = sent.message_id
         bot.answer_callback_query(call.id)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('xo_join2_'))
-    def xo_join_game_new(call):
-        data = call.data.split('_')
-        chat_id = int(data[2])
-        rows = int(data[3])
-        cols = int(data[4])
-        win_len = int(data[5])
-        mode = data[6]
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('join_'))
+    def join_game(call):
+        chat_id = int(call.data.split('_')[1])
         
         if chat_id not in ttt_games:
-            bot.answer_callback_query(call.id, "❌ Игра не найдена")
+            bot.answer_callback_query(call.id, "❌ Игра не найдена", show_alert=True)
             return
         
         game = ttt_games[chat_id]
         if game["players"][1] is not None:
-            bot.answer_callback_query(call.id, "❌ Уже есть второй игрок")
+            bot.answer_callback_query(call.id, "❌ Уже есть второй игрок", show_alert=True)
             return
         
         if game["players"][0] == call.from_user.id:
-            bot.answer_callback_query(call.id, "❌ Ты создал игру")
+            bot.answer_callback_query(call.id, "❌ Ты создал игру", show_alert=True)
             return
         
         game["players"][1] = call.from_user.id
-        game["player_names"][1] = call.from_user.first_name
+        game["names"][1] = call.from_user.first_name
         
-        markup = create_field_keyword(game["board"], rows, cols, chat_id)
+        keyboard = create_keyboard(game["board"], game["rows"], game["cols"], chat_id)
+        
         text = (
-            f"🎮 **Крестики-нолики**\n"
-            f"Размер: {rows}×{cols}\n"
-            f"Режим: {'✨ Магический' if mode == 'cool' else '🎲 Обычный'}\n"
-            f"Для победы нужно {win_len} в ряд.\n\n"
-            f"❌ {game['player_names'][0]}\n"
-            f"⭕ {game['player_names'][1]}\n\n"
-            f"Ход: {game['player_names'][0]} (❌)"
+            f"🎮 Крестики-нолики {game['rows']}x{game['cols']}\n"
+            f"Победа: {game['win_len']} в ряд\n"
+            f"Режим: {'Магический ✨' if game['mode'] == 'magic' else 'Обычный 🎲'}\n\n"
+            f"❌ {game['names'][0]}\n"
+            f"⭕ {game['names'][1]}\n\n"
+            f"Ход: {game['names'][0]} (❌)"
         )
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
-        bot.answer_callback_query(call.id, "✅ Ты в игре!")
+        bot.edit_message_text(text, chat_id, game["message_id"], reply_markup=keyboard)
+        bot.answer_callback_query(call.id, "✅ Ты в игре!", show_alert=False)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('ttt2_move_'))
-    def xo_move_new(call):
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('ttt_move_'))
+    def make_move(call):
         data = call.data.split('_')
         chat_id = int(data[2])
         row = int(data[3])
         col = int(data[4])
         
         if chat_id not in ttt_games:
-            bot.answer_callback_query(call.id, "❌ Игра не найдена")
+            bot.answer_callback_query(call.id, "❌ Игра не найдена", show_alert=True)
             return
         
         game = ttt_games[chat_id]
         user_id = call.from_user.id
+        rows, cols, win_len = game["rows"], game["cols"], game["win_len"]
         
         if game["players"][1] is None:
-            bot.answer_callback_query(call.id, "❌ Второй игрок ещё не присоединился")
+            bot.answer_callback_query(call.id, "❌ Второй игрок не присоединился", show_alert=True)
             return
         
         if game["current"] != user_id:
-            bot.answer_callback_query(call.id, "⏳ Сейчас не твой ход")
+            bot.answer_callback_query(call.id, "⏳ Сейчас не твой ход", show_alert=True)
             return
         
         if user_id not in game["players"]:
-            bot.answer_callback_query(call.id, "❌ Ты не в игре")
+            bot.answer_callback_query(call.id, "❌ Ты не в игре", show_alert=True)
             return
         
         if game["board"][row][col] != " ":
-            bot.answer_callback_query(call.id, "❌ Клетка занята")
+            bot.answer_callback_query(call.id, "❌ Клетка занята", show_alert=True)
             return
         
         player_symbol = "❌" if user_id == game["players"][0] else "⭕"
         game["board"][row][col] = player_symbol
         
-        # Проверка победы
-        if check_win_condition(game["board"], game["rows"], game["cols"], player_symbol, game["win_len"]):
-            winner_name = game["player_names"][0] if player_symbol == "❌" else game["player_names"][1]
-            text = f"🏆 **ПОБЕДА!**\n🥳 {winner_name} выиграл!\n\nНажми /xo чтобы сыграть снова."
-            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+        if check_win(game["board"], rows, cols, player_symbol, win_len):
+            winner_name = game["names"][0] if player_symbol == "❌" else game["names"][1]
+            text = f"🏆 ПОБЕДА! {winner_name} выиграл!\n\nНажми /xo чтобы сыграть снова."
+            bot.edit_message_text(text, chat_id, game["message_id"])
             del ttt_games[chat_id]
-            bot.answer_callback_query(call.id, f"🎉 {winner_name} победил!")
+            bot.answer_callback_query(call.id, f"🎉 {winner_name} победил!", show_alert=True)
             return
         
-        # Проверка ничьи
-        if all(cell != " " for row in game["board"] for cell in row):
-            text = "🤝 **НИЧЬЯ!**\n\nНажми /xo чтобы сыграть снова."
-            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+        if check_draw(game["board"], rows, cols):
+            text = "🤝 НИЧЬЯ!\n\nНажми /xo чтобы сыграть снова."
+            bot.edit_message_text(text, chat_id, game["message_id"])
             del ttt_games[chat_id]
-            bot.answer_callback_query(call.id, "🤝 Ничья!")
+            bot.answer_callback_query(call.id, "🤝 Ничья!", show_alert=True)
             return
         
-        # Эффект в магическом режиме
         effect_text = ""
-        if game["mode"] == "cool":
+        if game["mode"] == "magic":
             roll = random.random()
             cumsum = 0
-            chosen_effect = None
             for eff in SPECIAL_EFFECTS:
                 cumsum += eff["chance"]
                 if roll <= cumsum:
-                    chosen_effect = eff
+                    effect_text = f"\n✨ {apply_effect(game['board'], rows, cols, player_symbol, eff['effect'])}"
                     break
-            if chosen_effect:
-                effect_text = f"\n✨ {apply_effect(game['board'], game['rows'], game['cols'], player_symbol, chosen_effect['effect'])}"
         
-        # Меняем ход
         if game.get("freeze"):
             game["freeze"] = False
-            effect_text += "\n❄️ Ход противника пропущен из-за заморозки"
+            effect_text += "\n❄️ Ход противника пропущен"
         else:
             game["current"] = game["players"][1] if user_id == game["players"][0] else game["players"][0]
         
         if game.get("extra_turn"):
             game["extra_turn"] = False
-            effect_text += "\n⚡ Ты получаешь дополнительный ход!"
+            effect_text += "\n⚡ Дополнительный ход!"
             game["current"] = user_id
         
-        current_name = game["player_names"][0] if game["current"] == game["players"][0] else game["player_names"][1]
+        current_name = game["names"][0] if game["current"] == game["players"][0] else game["names"][1]
         current_symbol = "❌" if game["current"] == game["players"][0] else "⭕"
         
-        markup = create_field_keyword(game["board"], game["rows"], game["cols"], chat_id)
+        keyboard = create_keyboard(game["board"], rows, cols, chat_id)
+        
         text = (
-            f"🎮 **Крестики-нолики**\n"
-            f"Размер: {game['rows']}×{game['cols']}\n"
-            f"Режим: {'✨ Магический' if game['mode'] == 'cool' else '🎲 Обычный'}\n"
-            f"Для победы нужно {game['win_len']} в ряд.\n\n"
-            f"❌ {game['player_names'][0]}\n"
-            f"⭕ {game['player_names'][1]}\n\n"
+            f"🎮 Крестики-нолики {rows}x{cols}\n"
+            f"Победа: {win_len} в ряд\n"
+            f"Режим: {'Магический ✨' if game['mode'] == 'magic' else 'Обычный 🎲'}\n\n"
+            f"❌ {game['names'][0]}\n"
+            f"⭕ {game['names'][1]}\n\n"
             f"Ход: {current_name} ({current_symbol}){effect_text}"
         )
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+        bot.edit_message_text(text, chat_id, game["message_id"], reply_markup=keyboard)
         bot.answer_callback_query(call.id)
     
     @bot.message_handler(commands=['reset_xo'])
-    def reset_xo_game(message):
+    def reset_xo(message):
         chat_id = message.chat.id
         if chat_id in ttt_games:
             del ttt_games[chat_id]
-            bot.reply_to(message, "🔄 Игра сброшена. Можешь начать новую через /xo")
+            bot.reply_to(message, "🔄 Игра сброшена")
         else:
             bot.reply_to(message, "❌ Нет активной игры")
     
     @bot.message_handler(commands=['xhelp'])
-    def xhelp_command(message):
+    def xhelp(message):
         help_text = (
-            "🎮 <b>Крестики-нолики — полная помощь</b>\n\n"
-            "🔹 <b>Начать игру:</b> /xo\n"
-            "🔹 <b>Сбросить игру:</b> /reset_xo\n\n"
-            "📌 <b>Режимы:</b>\n"
-            "• Обычный — классическая игра\n"
-            "• Магический — случайные эффекты\n\n"
-            "📌 <b>Размеры поля:</b>\n"
+            "🎮 Крестики-нолики — помощь\n\n"
+            "/xo — начать игру\n"
+            "/reset_xo — сбросить игру\n\n"
+            "📌 Размеры:\n"
             "• 3×3 — победа за 3 в ряд\n"
             "• 5×5 — победа за 4 в ряд\n"
-            "• 8×12 — победа за 5 в ряд\n\n"
-            "✨ <b>Магические эффекты:</b>\n"
-            "• 🌪️ Ветер (15%) — перемешивает поле\n"
+            "• 12×8 — победа за 5 в ряд\n\n"
+            "✨ Магические эффекты (шанс выпадения после хода):\n"
+            "• 🌪️ Ветер (12%) — перемешивает поле\n"
             "• ❄️ Заморозка (10%) — пропуск хода\n"
-            "• 🐞 Баг (8%) — захват клетки\n"
-            "• ☀️ Солнце (8%) — удаление фигуры\n"
-            "• 🌙 Луна (7%) — обмен фигур\n"
-            "• 💥 Взрыв (5%) — уничтожение 3 клеток\n"
-            "• 🌀 Водоворот (5%) — сдвиг поля\n"
-            "• ⚡ Доп. ход (4%) — ещё один ход\n"
+            "• 🐞 Баг (9%) — захват клетки\n"
+            "• ☀️ Солнце (9%) — удаление фигуры\n"
+            "• 🌙 Луна (8%) — обмен фигур\n"
+            "• 💥 Взрыв (6%) — уничтожение 3 клеток\n"
+            "• 🌀 Водоворот (6%) — сдвиг поля\n"
+            "• ⚡ Доп. ход (4%) — дополнительный ход\n"
             "• 🛡️ Защита (4%) — блок эффекта\n"
             "• 🎁 Сюрприз (4%) — случайный эффект\n"
             "• 🕯️ Проклятие (2%) — исчезновение фигуры\n"
-            "• 🌟 Благословение (2%) — двойная фигура\n\n"
-            "🎲 <b>Как ходить:</b>\n"
-            "• Нажимай на кнопки с полем\n"
-            "• ❌ — крестики (ходит первый)\n"
-            "• ⭕ — нолики (ходит второй)\n\n"
-            "🍀 <b>Удачи!</b>"
+            "• 🌟 Благословение (2%) — двойная фигура\n"
+            "• 💀 Смерть (1%) — уничтожает все фигуры противника\n"
+            "• 🌀 Хаос (1%) — полностью случайное поле\n\n"
+            "🎲 Как играть: нажимай на клетки\n"
+            "❌ — крестики (ходит первый)\n"
+            "⭕ — нолики (ходит второй)\n\n"
+            "Удачи!"
         )
-        bot.reply_to(message, help_text, parse_mode='HTML')
-    # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ 2.0 ==========
+        bot.reply_to(message, help_text)
+    # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ ==========
 
     # ========== СТАТИСТИКА (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ, HTML) ==========
     import time
