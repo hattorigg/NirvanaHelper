@@ -4787,35 +4787,31 @@ def register_handlers():
                 if cell == " ":
                     if corners and ((i == 0 and j == 0) or (i == 0 and j == cols-1) or (i == rows-1 and j == 0) or (i == rows-1 and j == cols-1)):
                         idx = (i * cols + j) % len(corners)
-                        text = corners[idx]
+                        text = f" {corners[idx]} "
                     else:
-                        text = empty_cell
+                        text = f" {empty_cell} "
                 elif cell == "❌":
-                    text = "❌"
+                    text = " ❌ "
                 elif cell == "⭕":
-                    text = "⭕"
+                    text = " ⭕ "
                 else:
-                    text = cell
+                    text = f" {cell} "
                 callback = f"ttt2_move_{chat_id}_{i}_{j}"
                 row.append(InlineKeyboardButton(text, callback_data=callback))
             buttons.append(row)
         
+        # Добавляем рамку сверху
         if frame_char:
-            top_row = [InlineKeyboardButton(frame_char, callback_data="noop") for _ in range(cols)]
+            top_row = [InlineKeyboardButton(f" {frame_char} ", callback_data="noop") for _ in range(cols)]
             markup.row(*top_row)
         
+        # Основное поле
         for row in buttons:
-            if cols == 12:
-                new_row = []
-                for btn in row:
-                    btn.text = f" {btn.text} "
-                    new_row.append(btn)
-                markup.row(*new_row)
-            else:
-                markup.row(*row)
+            markup.row(*row)
         
+        # Добавляем рамку снизу
         if frame_char:
-            bottom_row = [InlineKeyboardButton(frame_char, callback_data="noop") for _ in range(cols)]
+            bottom_row = [InlineKeyboardButton(f" {frame_char} ", callback_data="noop") for _ in range(cols)]
             markup.row(*bottom_row)
         
         return markup
@@ -5706,91 +5702,6 @@ def cmd_say(message):
         bot.reply_to(message, "✅ Сообщение отправлено в чат!")
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка при отправке: {e}")
-
-    # ========== РАСПОЗНАВАНИЕ ГОЛОСОВЫХ (Hugging Face, рабочая модель) ==========
-    import requests
-    import os
-    import time
-    
-    HF_API_KEY = os.environ.get('HUGGINGFACE_API_KEY')
-    # Используем более стабильную модель
-    HF_MODEL = "openai/whisper-tiny.en"
-    
-    @bot.message_handler(content_types=['voice'])
-    def handle_voice(message):
-        # Только в личке — автоматическое распознавание
-        if message.chat.type == 'private':
-            process_voice(message)
-        # В группе — никакого ответа, ждём команду
-    
-    @bot.message_handler(commands=['transcribe', 'расшифруй', 'распознай'])
-    def transcribe_command(message):
-        if not message.reply_to_message:
-            bot.reply_to(message, "❌ Ответь на голосовое сообщение")
-            return
-        if not message.reply_to_message.voice:
-            bot.reply_to(message, "❌ Это не голосовое сообщение")
-            return
-        process_voice(message.reply_to_message, message.chat.id)
-    
-    def process_voice(voice_message, reply_chat_id=None):
-        chat_id = reply_chat_id or voice_message.chat.id
-        
-        if not HF_API_KEY:
-            bot.send_message(chat_id, "❌ API ключ Hugging Face не настроен. Добавь HUGGINGFACE_API_KEY в Render.")
-            return
-        
-        bot.send_chat_action(chat_id, 'typing')
-        
-        try:
-            # Скачиваем голосовое
-            file_info = bot.get_file(voice_message.voice.file_id)
-            file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
-            
-            resp = requests.get(file_url, timeout=30)
-            if resp.status_code != 200:
-                bot.send_message(chat_id, "❌ Не удалось скачать голосовое")
-                return
-            
-            # Сохраняем временный OGG
-            temp_ogg = f"/tmp/voice_{voice_message.from_user.id}_{int(time.time())}.ogg"
-            with open(temp_ogg, 'wb') as f:
-                f.write(resp.content)
-            
-            # Отправляем в Hugging Face
-            API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-            headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-            
-            with open(temp_ogg, 'rb') as f:
-                audio_data = f.read()
-            
-            response = requests.post(API_URL, headers=headers, data=audio_data, timeout=60)
-            
-            if response.status_code == 200:
-                result = response.json()
-                text = result.get('text', '').strip()
-                if text:
-                    user_name = voice_message.from_user.first_name
-                    bot.send_message(
-                        chat_id,
-                        f"🎤 Расшифровка от {user_name}:\n\n{text}"
-                    )
-                else:
-                    bot.send_message(chat_id, "❌ Не удалось распознать речь (текст пустой)")
-            else:
-                # Пробуем другую модель если первая упала
-                if response.status_code == 410:
-                    bot.send_message(chat_id, "❌ Модель временно недоступна. Попробуй через минуту.")
-                else:
-                    bot.send_message(chat_id, f"❌ Ошибка API: {response.status_code}")
-            
-            # Удаляем временный файл
-            if os.path.exists(temp_ogg):
-                os.remove(temp_ogg)
-                    
-        except Exception as e:
-            bot.send_message(chat_id, f"❌ Ошибка: {str(e)[:100]}")
-    # ========== КОНЕЦ РАСПОЗНАВАНИЯ ==========
 
 register_handlers()
 
