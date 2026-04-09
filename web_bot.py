@@ -4478,7 +4478,7 @@ def register_handlers():
         not (message.text and message.text.startswith('/ask')) and
         not (message.reply_to_message and message.reply_to_message.text and message.reply_to_message.text.startswith('/ask')) and
         ((message.reply_to_message and message.reply_to_message.from_user.id == bot.get_me().id) or
-         (message.text and "@HatHelperBot" in message.text))
+         (message.text and "@RevisionMainBot" in message.text))
     )
     def revision_chat_handler(message):
         try:
@@ -4487,8 +4487,8 @@ def register_handlers():
             user_name = message.from_user.first_name
             
             text = message.text or message.caption or ""
-            if message.text and "@HatHelperBot" in text:
-                text = text.replace("@HatHelperBot", "").strip()
+            if message.text and "@RevisionMainBot" in text:
+                text = text.replace("@RevisionMainBot", "").strip()
             
             if not text:
                 text = "привет"
