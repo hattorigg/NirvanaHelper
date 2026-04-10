@@ -5135,6 +5135,220 @@ def register_handlers():
         bot.reply_to(message, help_text)
     # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ ==========
 
+    # ========== СТАТИСТИКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЕЙ ==========
+    import time
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    # Файл для хранения статистики
+    ACTIVITY_FILE = "activity_stats.json"
+    
+    # Лимиты для разных периодов
+    PERIOD_LIMITS = {
+        "daily": 20,
+        "weekly": 50,
+        "monthly": 50,
+        "total": 100
+    }
+    
+    def load_activity_stats():
+        if os.path.exists(ACTIVITY_FILE):
+            with open(ACTIVITY_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+    
+    def save_activity_stats(stats):
+        with open(ACTIVITY_FILE, 'w') as f:
+            json.dump(stats, f, indent=2, ensure_ascii=False)
+    
+    def update_activity_stats(user_id, user_name, chat_id):
+        """Обновляет статистику активности для пользователя"""
+        stats = load_activity_stats()
+        user_id_str = str(user_id)
+        today = datetime.now().strftime('%Y-%m-%d')
+        week = datetime.now().strftime('%Y-%W')
+        month = datetime.now().strftime('%Y-%m')
+        
+        if user_id_str not in stats:
+            stats[user_id_str] = {
+                "name": user_name,
+                "daily": {},
+                "weekly": {},
+                "monthly": {},
+                "total": 0,
+                "last_active": today
+            }
+        
+        stats[user_id_str]["name"] = user_name
+        stats[user_id_str]["daily"][today] = stats[user_id_str]["daily"].get(today, 0) + 1
+        stats[user_id_str]["weekly"][week] = stats[user_id_str]["weekly"].get(week, 0) + 1
+        stats[user_id_str]["monthly"][month] = stats[user_id_str]["monthly"].get(month, 0) + 1
+        stats[user_id_str]["total"] = stats[user_id_str].get("total", 0) + 1
+        stats[user_id_str]["last_active"] = today
+        
+        save_activity_stats(stats)
+    
+    def get_top_users(period="total", reverse=False, limit=None):
+        stats = load_activity_stats()
+        today = datetime.now().strftime('%Y-%m-%d')
+        week = datetime.now().strftime('%Y-%W')
+        month = datetime.now().strftime('%Y-%m')
+        
+        if limit is None:
+            limit = PERIOD_LIMITS.get(period, 50)
+        
+        user_scores = []
+        
+        for user_id, data in stats.items():
+            name = data.get("name", "Неизвестный")
+            
+            if period == "daily":
+                score = data.get("daily", {}).get(today, 0)
+            elif period == "weekly":
+                score = data.get("weekly", {}).get(week, 0)
+            elif period == "monthly":
+                score = data.get("monthly", {}).get(month, 0)
+            else:
+                score = data.get("total", 0)
+            
+            if score > 0:
+                user_scores.append((name, score, user_id))
+        
+        user_scores.sort(key=lambda x: x[1], reverse=not reverse)
+        return user_scores[:limit]
+    
+    def get_user_stats(user_id):
+        stats = load_activity_stats()
+        user_id_str = str(user_id)
+        today = datetime.now().strftime('%Y-%m-%d')
+        week = datetime.now().strftime('%Y-%W')
+        month = datetime.now().strftime('%Y-%m')
+        
+        if user_id_str not in stats:
+            return None
+        
+        data = stats[user_id_str]
+        return {
+            "name": data.get("name", "Неизвестный"),
+            "daily": data.get("daily", {}).get(today, 0),
+            "weekly": data.get("weekly", {}).get(week, 0),
+            "monthly": data.get("monthly", {}).get(month, 0),
+            "total": data.get("total", 0),
+            "last_active": data.get("last_active", "никогда")
+        }
+    
+    def format_stat_message(period, top_users, is_inactive=False):
+        period_names = {
+            "daily": "📅 за сегодня",
+            "weekly": "📆 за неделю",
+            "monthly": "📊 за месяц",
+            "total": "🏆 за всё время"
+        }
+        
+        if is_inactive:
+            title = f"🛌 <b>Топ неактивных пользователей</b>\n<i>{period_names.get(period, '')}</i>\n\n"
+        else:
+            title = f"🎖️ <b>Топ активных пользователей</b>\n<i>{period_names.get(period, '')}</i>\n\n"
+        
+        if not top_users:
+            return title + "📭 Пока нет данных"
+        
+        medals = ["🥇", "🥈", "🥉"]
+        message = title
+        for i, (name, score, user_id) in enumerate(top_users, 1):
+            medal = medals[i-1] if i <= 3 else f"{i}."
+            message += f"{medal} <b>{name}</b> — {score} сообщ(а)\n"
+        
+        return message
+    
+    @bot.message_handler(func=lambda message: message.text and message.text.lower().startswith(('стата', 'статистика')))
+    def activity_stats_command(message):
+        parts = message.text.lower().split()
+        
+        # Статистика пользователя по ответу на сообщение
+        if message.reply_to_message:
+            target_id = message.reply_to_message.from_user.id
+            target_name = message.reply_to_message.from_user.first_name
+            stats = get_user_stats(target_id)
+            
+            if not stats:
+                bot.reply_to(message, f"📭 У пользователя {target_name} пока нет активности")
+                return
+            
+            reply = (
+                f"👤 <b>Статистика пользователя {target_name}</b>\n\n"
+                f"📅 Сегодня: {stats['daily']} сообщ\n"
+                f"📆 За неделю: {stats['weekly']} сообщ\n"
+                f"📊 За месяц: {stats['monthly']} сообщ\n"
+                f"🏆 За всё время: {stats['total']} сообщ\n\n"
+                f"🕐 Последняя активность: {stats['last_active']}"
+            )
+            bot.reply_to(message, reply, parse_mode='HTML')
+            return
+        
+        is_inactive = "неактив" in parts or "inactive" in parts
+        
+        period = "total"
+        if len(parts) > 1:
+            period_map = {
+                "день": "daily", "дня": "daily", "днев": "daily", "сегодня": "daily",
+                "неделя": "weekly", "неделю": "weekly", "недели": "weekly",
+                "месяц": "monthly", "месяца": "monthly", "месяцев": "monthly",
+                "вся": "total", "все": "total", "общая": "total", "всё": "total"
+            }
+            for key, val in period_map.items():
+                if key in parts[1]:
+                    period = val
+                    break
+        
+        limit = PERIOD_LIMITS.get(period, 50)
+        top_users = get_top_users(period, reverse=is_inactive, limit=limit)
+        message_text = format_stat_message(period, top_users, is_inactive)
+        
+        markup = InlineKeyboardMarkup(row_width=4)
+        markup.add(
+            InlineKeyboardButton("📅 День", callback_data="stat_daily"),
+            InlineKeyboardButton("📆 Неделя", callback_data="stat_weekly"),
+            InlineKeyboardButton("📊 Месяц", callback_data="stat_monthly"),
+            InlineKeyboardButton("🏆 Вся", callback_data="stat_total")
+        )
+        
+        bot.reply_to(message, message_text, reply_markup=markup, parse_mode='HTML')
+    
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('stat_'))
+    def stat_callback(call):
+        period_map = {
+            "stat_daily": "daily",
+            "stat_weekly": "weekly",
+            "stat_monthly": "monthly",
+            "stat_total": "total"
+        }
+        period = period_map.get(call.data, "total")
+        limit = PERIOD_LIMITS.get(period, 50)
+        top_users = get_top_users(period, reverse=False, limit=limit)
+        message_text = format_stat_message(period, top_users, is_inactive=False)
+        bot.edit_message_text(message_text, call.message.chat.id, call.message.message_id, reply_markup=call.message.reply_markup, parse_mode='HTML')
+        bot.answer_callback_query(call.id)
+    
+    # ПЕРЕХВАТЧИК С ИСКЛЮЧЕНИЯМИ (стоит в конце)
+    @bot.message_handler(func=lambda message: True, content_types=['text'])
+    def activity_collector(message):
+        # Пропускаем команды и сообщения, начинающиеся со /, стата, статистика
+        if message.text:
+            text_lower = message.text.lower()
+            if text_lower.startswith('/') or text_lower.startswith(('стата', 'статистика')):
+                return  # не обрабатываем, передаём дальше
+        
+        try:
+            user_id = message.from_user.id
+            user_name = message.from_user.first_name
+            chat_id = message.chat.id
+            update_activity_stats(user_id, user_name, chat_id)
+        except Exception as e:
+            print(f"Ошибка сбора активности: {e}")
+    # ========== КОНЕЦ СТАТИСТИКИ АКТИВНОСТИ ==========    
+
     # ========== СТАТИСТИКА (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ, HTML) ==========
     import time
     from datetime import datetime
@@ -5325,239 +5539,6 @@ def register_handlers():
             reply += f"<code>{time_str}</code> {text}\n"
         bot.reply_to(message, reply, parse_mode='HTML')
     # ========== КОНЕЦ СТАТИСТИКИ ==========     
-
-    # ========== СТАТИСТИКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЕЙ ==========
-    import time
-    from datetime import datetime, timedelta
-    from collections import defaultdict
-    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-    
-    # Файл для хранения статистики
-    ACTIVITY_FILE = "activity_stats.json"
-    
-    # Лимиты для разных периодов
-    PERIOD_LIMITS = {
-        "daily": 20,
-        "weekly": 50,
-        "monthly": 50,
-        "total": 100
-    }
-    
-    def load_activity_stats():
-        if os.path.exists(ACTIVITY_FILE):
-            with open(ACTIVITY_FILE, 'r') as f:
-                return json.load(f)
-        return {}
-    
-    def save_activity_stats(stats):
-        with open(ACTIVITY_FILE, 'w') as f:
-            json.dump(stats, f, indent=2, ensure_ascii=False)
-    
-    def update_activity_stats(user_id, user_name, chat_id):
-        """Обновляет статистику активности для пользователя"""
-        stats = load_activity_stats()
-        user_id_str = str(user_id)
-        today = datetime.now().strftime('%Y-%m-%d')
-        week = datetime.now().strftime('%Y-%W')
-        month = datetime.now().strftime('%Y-%m')
-        
-        if user_id_str not in stats:
-            stats[user_id_str] = {
-                "name": user_name,
-                "daily": {},
-                "weekly": {},
-                "monthly": {},
-                "total": 0,
-                "last_active": today
-            }
-        
-        # Обновляем имя (на случай смены)
-        stats[user_id_str]["name"] = user_name
-        
-        # Дневная статистика
-        stats[user_id_str]["daily"][today] = stats[user_id_str]["daily"].get(today, 0) + 1
-        
-        # Недельная статистика
-        stats[user_id_str]["weekly"][week] = stats[user_id_str]["weekly"].get(week, 0) + 1
-        
-        # Месячная статистика
-        stats[user_id_str]["monthly"][month] = stats[user_id_str]["monthly"].get(month, 0) + 1
-        
-        # Общая статистика
-        stats[user_id_str]["total"] = stats[user_id_str].get("total", 0) + 1
-        stats[user_id_str]["last_active"] = today
-        
-        save_activity_stats(stats)
-    
-    def get_top_users(period="total", reverse=False, limit=None):
-        """Возвращает топ пользователей за указанный период"""
-        stats = load_activity_stats()
-        today = datetime.now().strftime('%Y-%m-%d')
-        week = datetime.now().strftime('%Y-%W')
-        month = datetime.now().strftime('%Y-%m')
-        
-        if limit is None:
-            limit = PERIOD_LIMITS.get(period, 50)
-        
-        user_scores = []
-        
-        for user_id, data in stats.items():
-            name = data.get("name", "Неизвестный")
-            
-            if period == "daily":
-                score = data.get("daily", {}).get(today, 0)
-            elif period == "weekly":
-                score = data.get("weekly", {}).get(week, 0)
-            elif period == "monthly":
-                score = data.get("monthly", {}).get(month, 0)
-            else:  # total
-                score = data.get("total", 0)
-            
-            if score > 0:
-                user_scores.append((name, score, user_id))
-        
-        user_scores.sort(key=lambda x: x[1], reverse=not reverse)
-        return user_scores[:limit]
-    
-    def get_user_stats(user_id):
-        """Возвращает статистику конкретного пользователя"""
-        stats = load_activity_stats()
-        user_id_str = str(user_id)
-        today = datetime.now().strftime('%Y-%m-%d')
-        week = datetime.now().strftime('%Y-%W')
-        month = datetime.now().strftime('%Y-%m')
-        
-        if user_id_str not in stats:
-            return None
-        
-        data = stats[user_id_str]
-        return {
-            "name": data.get("name", "Неизвестный"),
-            "daily": data.get("daily", {}).get(today, 0),
-            "weekly": data.get("weekly", {}).get(week, 0),
-            "monthly": data.get("monthly", {}).get(month, 0),
-            "total": data.get("total", 0),
-            "last_active": data.get("last_active", "никогда")
-        }
-    
-    def format_stat_message(period, top_users, is_inactive=False):
-        """Форматирует сообщение со статистикой"""
-        period_names = {
-            "daily": "📅 за сегодня",
-            "weekly": "📆 за неделю",
-            "monthly": "📊 за месяц",
-            "total": "🏆 за всё время"
-        }
-        
-        if is_inactive:
-            title = f"🛌 <b>Топ неактивных пользователей</b>\n<i>{period_names.get(period, '')}</i>\n\n"
-        else:
-            title = f"🎖️ <b>Топ активных пользователей</b>\n<i>{period_names.get(period, '')}</i>\n\n"
-        
-        if not top_users:
-            return title + "📭 Пока нет данных"
-        
-        medals = ["🥇", "🥈", "🥉"]
-        message = title
-        for i, (name, score, user_id) in enumerate(top_users, 1):
-            medal = medals[i-1] if i <= 3 else f"{i}."
-            message += f"{medal} <b>{name}</b> — {score} сообщ(а)\n"
-        
-        return message
-    
-    @bot.message_handler(func=lambda message: message.text and message.text.lower().startswith(('стата', 'статистика')))
-    def activity_stats_command(message):
-        parts = message.text.lower().split()
-        
-        # Проверка на статистику конкретного пользователя (ответ на сообщение)
-        if message.reply_to_message:
-            target_id = message.reply_to_message.from_user.id
-            target_name = message.reply_to_message.from_user.first_name
-            stats = get_user_stats(target_id)
-            
-            if not stats:
-                bot.reply_to(message, f"📭 У пользователя {target_name} пока нет активности")
-                return
-            
-            reply = (
-                f"👤 <b>Статистика пользователя {target_name}</b>\n\n"
-                f"📅 Сегодня: {stats['daily']} сообщ\n"
-                f"📆 За неделю: {stats['weekly']} сообщ\n"
-                f"📊 За месяц: {stats['monthly']} сообщ\n"
-                f"🏆 За всё время: {stats['total']} сообщ\n\n"
-                f"🕐 Последняя активность: {stats['last_active']}"
-            )
-            bot.reply_to(message, reply, parse_mode='HTML')
-            return
-        
-        # Проверка на команду "неактив"
-        is_inactive = "неактив" in parts or "inactive" in parts
-        
-        # Определяем период
-        period = "total"
-        if len(parts) > 1:
-            period_map = {
-                "день": "daily",
-                "дня": "daily",
-                "днев": "daily",
-                "сегодня": "daily",
-                "неделя": "weekly",
-                "неделю": "weekly",
-                "недели": "weekly",
-                "месяц": "monthly",
-                "месяца": "monthly",
-                "месяцев": "monthly",
-                "вся": "total",
-                "все": "total",
-                "общая": "total",
-                "всё": "total"
-            }
-            for key, val in period_map.items():
-                if key in parts[1]:
-                    period = val
-                    break
-        
-        limit = PERIOD_LIMITS.get(period, 50)
-        top_users = get_top_users(period, reverse=is_inactive, limit=limit)
-        message = format_stat_message(period, top_users, is_inactive)
-        
-        # Кнопки для переключения периодов
-        markup = InlineKeyboardMarkup(row_width=4)
-        markup.add(
-            InlineKeyboardButton("📅 День", callback_data="stat_daily"),
-            InlineKeyboardButton("📆 Неделя", callback_data="stat_weekly"),
-            InlineKeyboardButton("📊 Месяц", callback_data="stat_monthly"),
-            InlineKeyboardButton("🏆 Вся", callback_data="stat_total")
-        )
-        
-        bot.reply_to(message, message, reply_markup=markup, parse_mode='HTML')
-    
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('stat_'))
-    def stat_callback(call):
-        period_map = {
-            "stat_daily": "daily",
-            "stat_weekly": "weekly",
-            "stat_monthly": "monthly",
-            "stat_total": "total"
-        }
-        period = period_map.get(call.data, "total")
-        limit = PERIOD_LIMITS.get(period, 50)
-        top_users = get_top_users(period, reverse=False, limit=limit)
-        message = format_stat_message(period, top_users, is_inactive=False)
-        bot.edit_message_text(message, call.message.chat.id, call.message.message_id, reply_markup=call.message.reply_markup, parse_mode='HTML')
-        bot.answer_callback_query(call.id)
-    
-    # Перехватчик для сбора статистики со всех сообщений
-    @bot.message_handler(func=lambda message: True, content_types=['text'])
-    def activity_collector(message):
-        try:
-            user_id = message.from_user.id
-            user_name = message.from_user.first_name
-            chat_id = message.chat.id
-            update_activity_stats(user_id, user_name, chat_id)
-        except Exception as e:
-            print(f"Ошибка сбора активности: {e}")
-    # ========== КОНЕЦ СТАТИСТИКИ АКТИВНОСТИ ==========
 
     # ========== СТАТУС БОТА (КРАСИВАЯ ВЕРСИЯ) ==========
     import time
