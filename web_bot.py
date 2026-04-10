@@ -5135,16 +5135,14 @@ def register_handlers():
         bot.reply_to(message, help_text)
     # ========== КОНЕЦ КРЕСТИКОВ-НОЛИКОВ ==========
 
-    # ========== СТАТИСТИКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЕЙ ==========
+    # ========== СТАТИСТИКА АКТИВНОСТИ (ПО ЧАТАМ) ==========
     import time
     from datetime import datetime, timedelta
     from collections import defaultdict
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
     
-    # Файл для хранения статистики
     ACTIVITY_FILE = "activity_stats.json"
     
-    # Лимиты для разных периодов
     PERIOD_LIMITS = {
         "daily": 20,
         "weekly": 50,
@@ -5163,15 +5161,19 @@ def register_handlers():
             json.dump(stats, f, indent=2, ensure_ascii=False)
     
     def update_activity_stats(user_id, user_name, chat_id):
-        """Обновляет статистику активности для пользователя"""
+        """Обновляет статистику активности для пользователя в конкретном чате"""
         stats = load_activity_stats()
+        chat_id_str = str(chat_id)
         user_id_str = str(user_id)
         today = datetime.now().strftime('%Y-%m-%d')
         week = datetime.now().strftime('%Y-%W')
         month = datetime.now().strftime('%Y-%m')
         
-        if user_id_str not in stats:
-            stats[user_id_str] = {
+        if chat_id_str not in stats:
+            stats[chat_id_str] = {}
+        
+        if user_id_str not in stats[chat_id_str]:
+            stats[chat_id_str][user_id_str] = {
                 "name": user_name,
                 "daily": {},
                 "weekly": {},
@@ -5180,17 +5182,19 @@ def register_handlers():
                 "last_active": today
             }
         
-        stats[user_id_str]["name"] = user_name
-        stats[user_id_str]["daily"][today] = stats[user_id_str]["daily"].get(today, 0) + 1
-        stats[user_id_str]["weekly"][week] = stats[user_id_str]["weekly"].get(week, 0) + 1
-        stats[user_id_str]["monthly"][month] = stats[user_id_str]["monthly"].get(month, 0) + 1
-        stats[user_id_str]["total"] = stats[user_id_str].get("total", 0) + 1
-        stats[user_id_str]["last_active"] = today
+        stats[chat_id_str][user_id_str]["name"] = user_name
+        stats[chat_id_str][user_id_str]["daily"][today] = stats[chat_id_str][user_id_str]["daily"].get(today, 0) + 1
+        stats[chat_id_str][user_id_str]["weekly"][week] = stats[chat_id_str][user_id_str]["weekly"].get(week, 0) + 1
+        stats[chat_id_str][user_id_str]["monthly"][month] = stats[chat_id_str][user_id_str]["monthly"].get(month, 0) + 1
+        stats[chat_id_str][user_id_str]["total"] = stats[chat_id_str][user_id_str].get("total", 0) + 1
+        stats[chat_id_str][user_id_str]["last_active"] = today
         
         save_activity_stats(stats)
     
-    def get_top_users(period="total", reverse=False, limit=None):
+    def get_top_users(chat_id, period="total", reverse=False, limit=None):
+        """Возвращает топ пользователей в конкретном чате"""
         stats = load_activity_stats()
+        chat_id_str = str(chat_id)
         today = datetime.now().strftime('%Y-%m-%d')
         week = datetime.now().strftime('%Y-%W')
         month = datetime.now().strftime('%Y-%m')
@@ -5198,9 +5202,11 @@ def register_handlers():
         if limit is None:
             limit = PERIOD_LIMITS.get(period, 50)
         
-        user_scores = []
+        if chat_id_str not in stats:
+            return []
         
-        for user_id, data in stats.items():
+        user_scores = []
+        for user_id, data in stats[chat_id_str].items():
             name = data.get("name", "Неизвестный")
             
             if period == "daily":
@@ -5218,17 +5224,19 @@ def register_handlers():
         user_scores.sort(key=lambda x: x[1], reverse=not reverse)
         return user_scores[:limit]
     
-    def get_user_stats(user_id):
+    def get_user_stats(chat_id, user_id):
+        """Возвращает статистику конкретного пользователя в чате"""
         stats = load_activity_stats()
+        chat_id_str = str(chat_id)
         user_id_str = str(user_id)
         today = datetime.now().strftime('%Y-%m-%d')
         week = datetime.now().strftime('%Y-%W')
         month = datetime.now().strftime('%Y-%m')
         
-        if user_id_str not in stats:
+        if chat_id_str not in stats or user_id_str not in stats[chat_id_str]:
             return None
         
-        data = stats[user_id_str]
+        data = stats[chat_id_str][user_id_str]
         return {
             "name": data.get("name", "Неизвестный"),
             "daily": data.get("daily", {}).get(today, 0),
@@ -5238,7 +5246,7 @@ def register_handlers():
             "last_active": data.get("last_active", "никогда")
         }
     
-    def format_stat_message(period, top_users, is_inactive=False):
+    def format_stat_message(chat_id, period, top_users, is_inactive=False):
         period_names = {
             "daily": "📅 за сегодня",
             "weekly": "📆 за неделю",
@@ -5252,7 +5260,7 @@ def register_handlers():
             title = f"🎖️ <b>Топ активных пользователей</b>\n<i>{period_names.get(period, '')}</i>\n\n"
         
         if not top_users:
-            return title + "📭 Пока нет данных"
+            return title + "📭 Пока нет данных\n(статистика собирается с момента добавления бота в чат)"
         
         medals = ["🥇", "🥈", "🥉"]
         message = title
@@ -5264,16 +5272,17 @@ def register_handlers():
     
     @bot.message_handler(func=lambda message: message.text and message.text.lower().startswith(('стата', 'статистика')))
     def activity_stats_command(message):
+        chat_id = message.chat.id
         parts = message.text.lower().split()
         
         # Статистика пользователя по ответу на сообщение
         if message.reply_to_message:
             target_id = message.reply_to_message.from_user.id
             target_name = message.reply_to_message.from_user.first_name
-            stats = get_user_stats(target_id)
+            stats = get_user_stats(chat_id, target_id)
             
             if not stats:
-                bot.reply_to(message, f"📭 У пользователя {target_name} пока нет активности")
+                bot.reply_to(message, f"📭 У пользователя {target_name} пока нет активности в этом чате")
                 return
             
             reply = (
@@ -5303,8 +5312,8 @@ def register_handlers():
                     break
         
         limit = PERIOD_LIMITS.get(period, 50)
-        top_users = get_top_users(period, reverse=is_inactive, limit=limit)
-        message_text = format_stat_message(period, top_users, is_inactive)
+        top_users = get_top_users(chat_id, period, reverse=is_inactive, limit=limit)
+        message_text = format_stat_message(chat_id, period, top_users, is_inactive)
         
         markup = InlineKeyboardMarkup(row_width=4)
         markup.add(
@@ -5325,20 +5334,20 @@ def register_handlers():
             "stat_total": "total"
         }
         period = period_map.get(call.data, "total")
+        chat_id = call.message.chat.id
         limit = PERIOD_LIMITS.get(period, 50)
-        top_users = get_top_users(period, reverse=False, limit=limit)
-        message_text = format_stat_message(period, top_users, is_inactive=False)
+        top_users = get_top_users(chat_id, period, reverse=False, limit=limit)
+        message_text = format_stat_message(chat_id, period, top_users, is_inactive=False)
         bot.edit_message_text(message_text, call.message.chat.id, call.message.message_id, reply_markup=call.message.reply_markup, parse_mode='HTML')
         bot.answer_callback_query(call.id)
     
-    # ПЕРЕХВАТЧИК С ИСКЛЮЧЕНИЯМИ (стоит в конце)
+    # Перехватчик с исключениями
     @bot.message_handler(func=lambda message: True, content_types=['text'])
     def activity_collector(message):
-        # Пропускаем команды и сообщения, начинающиеся со /, стата, статистика
         if message.text:
             text_lower = message.text.lower()
             if text_lower.startswith('/') or text_lower.startswith(('стата', 'статистика')):
-                return  # не обрабатываем, передаём дальше
+                return
         
         try:
             user_id = message.from_user.id
@@ -5347,7 +5356,7 @@ def register_handlers():
             update_activity_stats(user_id, user_name, chat_id)
         except Exception as e:
             print(f"Ошибка сбора активности: {e}")
-    # ========== КОНЕЦ СТАТИСТИКИ АКТИВНОСТИ ==========    
+    # ========== КОНЕЦ СТАТИСТИКИ АКТИВНОСТИ ==========
 
     # ========== СТАТИСТИКА (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ, HTML) ==========
     import time
