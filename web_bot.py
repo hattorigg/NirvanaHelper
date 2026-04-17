@@ -291,24 +291,18 @@ def cmd_start(message):
 @bot.message_handler(commands=['help', 'хелп'])
 def cmd_help(message):
     help_text = (
-        "🌿 Я — Revision, ИИ-помощник.\n\n"
-        "📌 Основные команды:\n"
-        "• /holiday — какой сегодня праздник\n"
-        "• /meme — случайный мем\n"
-        "• /remind ЧЧ:ММ текст — напоминание\n"
-        "• /calc 2+2 — калькулятор\n"
-        "• /fact, /creepyfact — факты\n"
-        "• /movie, /series, /anime — что посмотреть\n"
-        "• /recipe — случайный рецепт\n"
-        "• /cocktail — случайный коктейль\n"
-        "• /toast, /compliment, /advice, /wish, /quote\n"
-        "• /randomname, /nick, /color, /emoji\n"
-        "• /vibe, /mood, /energy, /luck — твой вайб\n"
-        "• /xo — крестики-нолики\n\n"
+        "🌿 Я — Revision, ИИ-помощник. Не просто бот, а твой тихий спутник в цифровом мире.\n\n"
+        "📌 Что я умею:\n\n"
+        "🎲 Погода, таро, вайб, настроение, энергия дня\n"
+        "⏰ Напоминалки, смена названия чата по праздникам\n"
+        "😂 Мемы, цитаты, факты, игры и уютные ритуалы\n"
+        "🔮 Инлайн-режим: вызывай меня в любом чате через @RevisionMainBot\n\n"
         "🤖 ИИ-чат:\n"
         "• @RevisionMainBot вопрос — задать вопрос\n"
         "• ответь на моё сообщение и начни с точки — продолжить диалог\n\n"
-        "✨ Полный список: https://graph.org/Revision-Commands-04-17"
+        "🌍 Полный список команд:\n"
+        "https://graph.org/Mnogofunkcionalnyj-II-pomoshchnik-Revision--polnoe-opisanie-komand-04-05\n\n"
+        "✨ Оставайся собой. Я рядом."
     )
     bot.reply_to(message, help_text)
 
