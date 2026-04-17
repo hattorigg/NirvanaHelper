@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+*.log
+memes/
+revision_personality.json
