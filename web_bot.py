@@ -134,13 +134,11 @@ def ask_g4f(prompt, user_id=None, user_name="друг"):
     try:
         from g4f import ChatCompletion
         
-        # Получаем историю диалога
         history = user_dialogs.get(user_id, []) if user_id else []
         context = ""
         for msg in history[-10:]:
             context += f"{msg['role']}: {msg['text']}\n"
         
-        # Строим промпт с учётом личности Ревижна
         system_prompt = revision.build_prompt(prompt, context, user_name)
         
         models_to_try = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku", "gemini-pro"]
@@ -162,10 +160,50 @@ def ask_g4f(prompt, user_id=None, user_name="друг"):
             except:
                 continue
         
-        return answer if answer else "😕 Не удалось получить ответ. Попробуй позже."
+        if not answer:
+            return "😕 Не удалось получить ответ. Попробуй позже."
+        
+        # 🛡️ ПРИНУДИТЕЛЬНАЯ ЗАЩИТА ЛИЧНОСТИ
+        # Если в вопросе спрашивают про создателя, а ответ содержит OpenAI — заменяем
+        creator_questions = [
+            "кто тебя создал", "кто твой создатель", "кто тебя разработал",
+            "кто твой разработчик", "кто тебя сделал", "чей ты",
+            "кто тебя придумал", "кто твой автор", "who created you",
+            "who made you", "who developed you"
+        ]
+        
+        forbidden_words = [
+            "OpenAI", "openai", "ChatGPT", "chatgpt", "GPT", "gpt",
+            "команда разработчиков", "исследователей", "компании OpenAI",
+            "Anthropic", "Claude", "Google", "Gemini", "разработала компания"
+        ]
+        
+        # Проверяем, спрашивали ли про создателя
+        asked_about_creator = any(q in prompt.lower() for q in creator_questions)
+        
+        # Проверяем, есть ли запрещённые слова в ответе
+        has_forbidden = any(word.lower() in answer.lower() for word in forbidden_words)
+        
+        if asked_about_creator and has_forbidden:
+            answer = (
+                "Мой создатель — @HATTQRI. Он написал меня с нуля и вложил душу. "
+                "Я не имею отношения к OpenAI или другим корпорациям — я самостоятельный проект, "
+                "живущий в Telegram."
+            )
+        # Если запрещённые слова есть, но не спрашивали про создателя — просто убираем их
+        elif has_forbidden and not asked_about_creator:
+            for word in forbidden_words:
+                if word.lower() in answer.lower():
+                    answer = answer.replace(word, "").replace("  ", " ").strip()
+                    # Если после замены ответ стал пустым или слишком коротким
+                    if len(answer) < 10:
+                        answer = "Извини, я немного запутался. Давай поговорим о чём-то другом?"
+        
+        return answer
+        
     except Exception as e:
         return f"❌ Ошибка: {e}"
-
+        
 # ========== ОБРАБОТЧИК ИИ-ЧАТА ==========
 @bot.message_handler(func=lambda message: 
     message.text and 
