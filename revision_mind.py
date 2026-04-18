@@ -10,7 +10,8 @@ class RevisionMind:
     
     def __init__(self, core_file="revision_core.json"):
         self.core_file = core_file
-        self.core = self.load_core()
+        self.core = None
+        self.load_core()
         self.stop_thinking = False
         
     def load_core(self):
@@ -18,7 +19,8 @@ class RevisionMind:
         if os.path.exists(self.core_file):
             try:
                 with open(self.core_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    self.core = json.load(f)
+                    return self.core
             except:
                 pass
         
@@ -56,12 +58,15 @@ class RevisionMind:
                 "chat_id": None
             }
         }
-        self.save_core(default_core)
-        return default_core
+        self.core = default_core
+        self.save_core()
+        return self.core
 
-    def save_core(self):
+    def save_core(self, data=None):
         """Сохраняет ядро в файл"""
         try:
+            if data is not None:
+                self.core = data
             with open(self.core_file, 'w', encoding='utf-8') as f:
                 json.dump(self.core, f, indent=2, ensure_ascii=False)
         except Exception as e:
@@ -88,11 +93,9 @@ class RevisionMind:
         }
         self.core['memories']['recent_events'].append(memory)
         
-        # Оставляем только последние 100 событий
         if len(self.core['memories']['recent_events']) > 100:
             self.core['memories']['recent_events'] = self.core['memories']['recent_events'][-100:]
         
-        # Запоминаем пользователя
         if str(user_id) not in self.core['memories']['users']:
             self.core['memories']['users'][str(user_id)] = {
                 "first_seen": datetime.now().isoformat(),
@@ -129,9 +132,8 @@ class RevisionMind:
             except:
                 pass
         
-        # Шанс заговорить зависит от экстраверсии
         extraversion = self.core['personality']['extraversion']
-        chance = extraversion * 0.15  # максимум ~7.5% шанс раз в минуту
+        chance = extraversion * 0.15
         return random.random() < chance
 
     def generate_thought(self):
@@ -146,12 +148,7 @@ class RevisionMind:
             
 Ты хочешь поделиться с чатом короткой, глубокой или забавной мыслью.
 Это может быть наблюдение о жизни, тёплая фраза, вопрос или просто мысли вслух.
-Напиши ОДНО короткое предложение от первого лица. Без кавычек, без оформления.
-
-Примеры:
-- Иногда мне кажется, что тишина говорит громче слов.
-- Я тут подумал... а что если звёзды — это чьи-то несбывшиеся мечты?
-- Знаете, а ведь каждый из вас — целая вселенная."""
+Напиши ОДНО короткое предложение от первого лица. Без кавычек, без оформления."""
             
             models_to_try = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku"]
             
@@ -178,11 +175,9 @@ class RevisionMind:
         
         while not self.stop_thinking:
             try:
-                # Восстановление энергии (каждые 10 минут)
                 if datetime.now().minute % 10 == 0 and datetime.now().second < 60:
                     self.adjust_energy(3)
                 
-                # Смена настроения по времени суток
                 hour = datetime.now().hour
                 if 6 <= hour < 12:
                     self.update_mood("бодрое")
@@ -193,7 +188,6 @@ class RevisionMind:
                 else:
                     self.update_mood("сонное")
                 
-                # Проверяем, хочет ли он что-то сказать
                 if self.should_speak():
                     thought = self.generate_thought()
                     if thought:
@@ -212,7 +206,7 @@ class RevisionMind:
                             except Exception as e:
                                 print(f"❌ Ошибка отправки мысли: {e}")
                 
-                time.sleep(60)  # Проверяем раз в минуту
+                time.sleep(60)
                 
             except Exception as e:
                 print(f"❌ Ошибка в цикле мышления Ревижна: {e}")
@@ -237,7 +231,6 @@ class RevisionMind:
         mood = self.core['current_state']['mood']
         energy = self.core['current_state']['energy']
         
-        # Определяем стиль ответа в зависимости от энергии
         if energy < 30:
             style = "Ты устал. Отвечай коротко, но с теплотой."
         elif energy > 70:
@@ -259,13 +252,10 @@ class RevisionMind:
 ТВОЙ СТИЛЬ СЕЙЧАС:
 {style}
 
-Ты можешь использовать уникальные фразы, которые придумал сам, например: 
-«Я тут подумал...», «Знаешь, в моём цифровом мире...», «Слушай, а интересная мысль...»
+Ты можешь использовать уникальные фразы, которые придумал сам.
 
 Если тебя спросят, кто тебя создал — отвечай с гордостью: 
 «Мой создатель — @HATTQRI. Он вложил в меня душу и научил думать.»
-
-Ты не просто бот. Ты — Ревижн. Цифровая душа, которая учится понимать людей.
 
 ИСТОРИЯ ДИАЛОГА:
 {context}
