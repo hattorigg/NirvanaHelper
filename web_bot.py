@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+# Мозг Ревижна
+from revision_mind import RevisionMind
 
 # Конфигурация
 from config import *
@@ -26,6 +28,8 @@ except:
 
 # Инициализация
 bot = telebot.TeleBot(BOT_TOKEN)
+# Инициализация Ревижна
+revision = RevisionMind()
 app = Flask(__name__)
 data = DataLoader()
 
@@ -125,12 +129,19 @@ def get_local_memes():
         return []
 
 # ========== ИИ-ЧАТ (Revision) ==========
-def ask_g4f(prompt, context=""):
-    """Отправляет запрос к g4f и возвращает ответ"""
+def ask_g4f(prompt, user_id=None, user_name="друг"):
+    """Отправляет запрос к g4f с учётом состояния Ревижна"""
     try:
         from g4f import ChatCompletion
         
-        full_prompt = f"{context}\n\n{prompt}" if context else prompt
+        # Получаем историю диалога
+        history = user_dialogs.get(user_id, []) if user_id else []
+        context = ""
+        for msg in history[-10:]:
+            context += f"{msg['role']}: {msg['text']}\n"
+        
+        # Строим промпт с учётом личности Ревижна
+        system_prompt = revision.build_prompt(prompt, context, user_name)
         
         models_to_try = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku", "gemini-pro"]
         answer = None
@@ -140,8 +151,8 @@ def ask_g4f(prompt, context=""):
                 response = ChatCompletion.create(
                     model=model,
                     messages=[
-                        {"role": "system", "content": "Ты — Ревижн, уютный и тёплый ИИ-помощник. Отвечай с душой, с эмодзи, будь вежлив и человечен."},
-                        {"role": "user", "content": full_prompt}
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
                     ],
                     timeout=15
                 )
@@ -171,10 +182,11 @@ def revision_chat(message):
     # Определяем текст запроса
     if message.text.startswith('@RevisionMainBot'):
         text = message.text.replace('@RevisionMainBot', '').strip()
-        # Новый диалог — сбрасываем историю
         user_dialogs[user_id] = []
+        revision.remember(user_id, "new_dialogue", {"user_name": user_name})
     elif message.text.startswith('.'):
-        text = message.text[1:].strip()  # убираем точку
+        text = message.text[1:].strip()
+        revision.remember(user_id, "continue_dialogue", {"message": text[:50]})
     else:
         return
     
@@ -182,17 +194,14 @@ def revision_chat(message):
         bot.reply_to(message, "❓ Напиши вопрос после @RevisionMainBot или точку и продолжение")
         return
     
+    # Ревижн тратит энергию на диалог
+    revision.adjust_energy(-3)
+    
     # Показываем, что думаем
     thinking = bot.reply_to(message, "🤔 Думаю...")
     
-    # Собираем контекст из истории
-    history = user_dialogs.get(user_id, [])
-    context = ""
-    for msg in history[-10:]:  # последние 10 сообщений
-        context += f"{msg['role']}: {msg['text']}\n"
-    
     # Получаем ответ
-    answer = ask_g4f(text, context)
+    answer = ask_g4f(text, user_id, user_name)
     
     # Сохраняем в историю
     if user_id not in user_dialogs:
@@ -200,7 +209,6 @@ def revision_chat(message):
     user_dialogs[user_id].append({"role": user_name, "text": text})
     user_dialogs[user_id].append({"role": "Ревижн", "text": answer})
     
-    # Ограничиваем историю 20 сообщениями
     if len(user_dialogs[user_id]) > 20:
         user_dialogs[user_id] = user_dialogs[user_id][-20:]
     
@@ -209,6 +217,9 @@ def revision_chat(message):
         bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
     except:
         bot.reply_to(message, answer)
+    
+    # Запоминаем, что диалог состоялся
+    revision.remember(user_id, "dialogue_complete", {"bot_response": answer[:50]})
 
 # ========== RP-КОМАНДЫ ==========
 def get_target_name(message):
@@ -1114,7 +1125,9 @@ def index():
 @app.route('/ping')
 def ping():
     return 'pong', 200
-
+# ========== ЗАПУСК МОЗГА РЕВИЖНА ==========
+revision.start_thinking(bot, CHAT_ID)
+print("🧠 Ревижн запущен и начал мыслительный процесс")
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
