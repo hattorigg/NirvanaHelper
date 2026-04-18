@@ -52,7 +52,7 @@ class RevisionMind:
             },
             
             "autonomy_settings": {
-                "can_initiate_conversation": True,
+                "can_initiate_conversation": False,
                 "initiation_cooldown_hours": 3,
                 "min_energy_to_act": 30,
                 "chat_id": None
