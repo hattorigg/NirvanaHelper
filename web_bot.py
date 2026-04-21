@@ -28,6 +28,18 @@ except:
 
 # Инициализация
 bot = telebot.TeleBot(BOT_TOKEN)
+# ========== НАСТРОЙКА GIT ДЛЯ АВТОПУША ==========
+def setup_git():
+    """Настраивает Git на Render"""
+    import subprocess
+    try:
+        subprocess.run(["git", "config", "--global", "user.name", "hattorigg"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "bot@revision.local"], check=True)
+        print("✅ Git настроен для автопуша мемов")
+    except Exception as e:
+        print(f"❌ Ошибка настройки Git: {e}")
+
+setup_git()
 # Инициализация Ревижна
 revision = RevisionMind()
 app = Flask(__name__)
@@ -127,6 +139,66 @@ def get_local_memes():
     except Exception as e:
         print(f"Ошибка при получении списка мемов: {e}")
         return []
+
+# ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ ==========
+@bot.message_handler(commands=['addmeme'])
+def cmd_addmeme(message):
+    """Добавляет новый мем и пушит в GitHub"""
+    
+    # Проверка, что команда от создателя
+    if message.from_user.id != CREATOR_ID:
+        bot.reply_to(message, "❌ Только создатель может добавлять мемы!")
+        return
+    
+    # Проверка, что это ответ на фото
+    if not message.reply_to_message or not message.reply_to_message.photo:
+        bot.reply_to(message, "❌ Отправь эту команду в ОТВЕТ на сообщение с картинкой!")
+        return
+    
+    status_msg = bot.reply_to(message, "📥 Скачиваю мем...")
+    
+    try:
+        # Скачиваем фото
+        photo = message.reply_to_message.photo[-1]
+        file_info = bot.get_file(photo.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        
+        # Генерируем имя и сохраняем
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"meme_{timestamp}.jpg"
+        filepath = os.path.join(MEME_FOLDER, filename)
+        
+        os.makedirs(MEME_FOLDER, exist_ok=True)
+        
+        with open(filepath, 'wb') as f:
+            f.write(downloaded_file)
+        
+        bot.edit_message_text(
+            f"✅ Сохранён: `{filename}`\n📤 Пушу в GitHub...",
+            chat_id=status_msg.chat.id,
+            message_id=status_msg.message_id,
+            parse_mode="Markdown"
+        )
+        
+        # Пушим в GitHub
+        import subprocess
+        subprocess.run(["git", "add", filepath], check=True)
+        subprocess.run(["git", "commit", "-m", f"Add meme: {filename}"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        
+        bot.edit_message_text(
+            f"✅ Мем добавлен и отправлен в GitHub!\n📁 `{filename}`\n🚀 Render начнёт деплой автоматически.",
+            chat_id=status_msg.chat.id,
+            message_id=status_msg.message_id,
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        bot.edit_message_text(
+            f"❌ Ошибка: {e}",
+            chat_id=status_msg.chat.id,
+            message_id=status_msg.message_id
+        )
 
 # ========== ИИ-ЧАТ (Revision) ==========
 def ask_g4f(prompt, user_id=None, user_name="друг"):
