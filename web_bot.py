@@ -196,7 +196,6 @@ def get_local_memes():
 def cmd_addmeme(message):
     """Добавляет новый мем и пушит в GitHub (доступно всем)"""
     
-    # Проверка, что это ответ на фото
     if not message.reply_to_message or not message.reply_to_message.photo:
         bot.reply_to(message, "❌ Отправь эту команду в ОТВЕТ на сообщение с картинкой!")
         return
@@ -204,17 +203,14 @@ def cmd_addmeme(message):
     status_msg = bot.reply_to(message, "📥 Скачиваю мем...")
     
     try:
-        # Скачиваем фото
         photo = message.reply_to_message.photo[-1]
         file_info = bot.get_file(photo.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
-        # Генерируем БЕЗОПАСНОЕ имя файла (только латиница, цифры, _ и -)
         import re
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         user_id = message.from_user.id
         
-        # Очищаем имя пользователя от всех проблемных символов
         raw_name = message.from_user.first_name or "user"
         safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', raw_name)
         if not safe_name:
@@ -235,13 +231,11 @@ def cmd_addmeme(message):
             parse_mode="Markdown"
         )
         
-        # Пушим в GitHub (с кавычками для безопасности)
         import subprocess
-        import shlex
         
         subprocess.run(["git", "add", filepath], check=True, capture_output=True)
         subprocess.run(["git", "commit", "-m", f"Add meme: {filename}"], check=True, capture_output=True)
-        subprocess.run(["git", "push"], check=True, capture_output=True)
+        subprocess.run(["git", "push", "origin", "HEAD:main"], check=True, capture_output=True)
         
         bot.edit_message_text(
             f"✅ Мем добавлен и отправлен в GitHub!\n"
@@ -252,23 +246,13 @@ def cmd_addmeme(message):
             parse_mode="Markdown"
         )
         
-        print(f"📸 Новый мем добавлен и запушен: {filename}")
-        
     except subprocess.CalledProcessError as e:
         error_msg = f"❌ Ошибка Git: {e.stderr.decode() if e.stderr else str(e)}"
-        bot.edit_message_text(
-            error_msg[:200],
-            chat_id=status_msg.chat.id,
-            message_id=status_msg.message_id
-        )
+        bot.edit_message_text(error_msg[:200], chat_id=status_msg.chat.id, message_id=status_msg.message_id)
         print(f"❌ Git error: {e}")
         
     except Exception as e:
-        bot.edit_message_text(
-            f"❌ Ошибка: {e}",
-            chat_id=status_msg.chat.id,
-            message_id=status_msg.message_id
-        )
+        bot.edit_message_text(f"❌ Ошибка: {e}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
         print(f"❌ Addmeme error: {e}")
         
 # ========== ИИ-ЧАТ (Revision) ==========
