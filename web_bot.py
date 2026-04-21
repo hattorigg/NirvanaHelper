@@ -44,11 +44,35 @@ def setup_git():
     try:
         subprocess.run(["git", "config", "--global", "user.name", "hattorigg"], check=True)
         subprocess.run(["git", "config", "--global", "user.email", "bot@revision.local"], check=True)
-        print("✅ Git настроен для автопуша мемов")
+        print("✅ Git настроен для автопуша")
     except Exception as e:
         print(f"❌ Ошибка настройки Git: {e}")
 
+def setup_git_remote():
+    """Настраивает удалённый репозиторий для пуша"""
+    import subprocess
+    import os
+    
+    result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        github_token = os.environ.get('GITHUB_TOKEN', '')
+        if not github_token:
+            print("⚠️ GITHUB_TOKEN не найден в переменных окружения")
+            return
+        
+        repo_url = f"https://{github_token}@github.com/hattorigg/NirvanaHelper.git"
+        
+        try:
+            subprocess.run(["git", "remote", "add", "origin", repo_url], check=True)
+            print("✅ Git remote origin настроен")
+        except Exception as e:
+            print(f"❌ Ошибка настройки remote: {e}")
+    else:
+        print(f"✅ Git remote уже настроен")
+
 setup_git()
+setup_git_remote()
 # Инициализация Ревижна
 revision = RevisionMind()
 app = Flask(__name__)
