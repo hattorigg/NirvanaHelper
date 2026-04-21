@@ -185,11 +185,18 @@ def cmd_addmeme(message):
         file_info = bot.get_file(photo.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
-        # Генерируем имя: кто добавил + дата
-        user_id = message.from_user.id
-        user_name = message.from_user.first_name or "user"
+        # Генерируем БЕЗОПАСНОЕ имя файла (только латиница, цифры, _ и -)
+        import re
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"meme_{user_name}_{timestamp}.jpg"
+        user_id = message.from_user.id
+        
+        # Очищаем имя пользователя от всех проблемных символов
+        raw_name = message.from_user.first_name or "user"
+        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', raw_name)
+        if not safe_name:
+            safe_name = f"user{user_id}"
+        
+        filename = f"meme_{safe_name}_{timestamp}.jpg"
         filepath = os.path.join(MEME_FOLDER, filename)
         
         os.makedirs(MEME_FOLDER, exist_ok=True)
@@ -204,14 +211,16 @@ def cmd_addmeme(message):
             parse_mode="Markdown"
         )
         
-        # Пушим в GitHub
+        # Пушим в GitHub (с кавычками для безопасности)
         import subprocess
-        subprocess.run(["git", "add", filepath], check=True)
-        subprocess.run(["git", "commit", "-m", f"Add meme from {user_name}: {filename}"], check=True)
-        subprocess.run(["git", "push"], check=True)
+        import shlex
+        
+        subprocess.run(["git", "add", filepath], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", f"Add meme: {filename}"], check=True, capture_output=True)
+        subprocess.run(["git", "push"], check=True, capture_output=True)
         
         bot.edit_message_text(
-            f"✅ Мем от {user_name} добавлен и отправлен в GitHub!\n"
+            f"✅ Мем добавлен и отправлен в GitHub!\n"
             f"📁 `{filename}`\n"
             f"🚀 Render начнёт деплой автоматически.",
             chat_id=status_msg.chat.id,
@@ -219,7 +228,16 @@ def cmd_addmeme(message):
             parse_mode="Markdown"
         )
         
-        print(f"📸 Новый мем от {user_name} добавлен и запушен: {filename}")
+        print(f"📸 Новый мем добавлен и запушен: {filename}")
+        
+    except subprocess.CalledProcessError as e:
+        error_msg = f"❌ Ошибка Git: {e.stderr.decode() if e.stderr else str(e)}"
+        bot.edit_message_text(
+            error_msg[:200],
+            chat_id=status_msg.chat.id,
+            message_id=status_msg.message_id
+        )
+        print(f"❌ Git error: {e}")
         
     except Exception as e:
         bot.edit_message_text(
