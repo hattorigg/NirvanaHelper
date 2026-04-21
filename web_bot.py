@@ -1476,22 +1476,30 @@ def cmd_status(message):
 # ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ) ==========
 @bot.message_handler(commands=['say'])
 def cmd_say(message):
-    # Проверка создателя
+    print(f"🔔 Команда /say вызвана пользователем {message.from_user.id}")
+    
     if message.from_user.id != CREATOR_ID:
-        bot.reply_to(message, f"❌ Твой ID: {message.from_user.id}\nID создателя: {CREATOR_ID}")
+        bot.reply_to(message, f"❌ Твой ID: {message.from_user.id}\nНужен: {CREATOR_ID}")
         return
     
-    text = message.text[5:].strip()
+    # Получаем текст после команды
+    text = message.text
+    if text.startswith('/say@RevisionMainBot'):
+        text = text.replace('/say@RevisionMainBot', '').strip()
+    else:
+        text = text.replace('/say', '').strip()
+    
     if not text:
         bot.reply_to(message, "❌ Напиши текст после /say")
         return
     
     try:
-        # Пробуем отправить
         sent = bot.send_message(CHAT_ID, text)
-        bot.reply_to(message, f"✅ Отправлено в чат {CHAT_ID}!\nID сообщения: {sent.message_id}")
+        bot.reply_to(message, f"✅ Отправлено!")
+        print(f"✅ /say: {text[:50]}...")
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка: {e}")
+        print(f"❌ /say error: {e}")
 
 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
