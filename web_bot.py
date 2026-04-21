@@ -19,6 +19,15 @@ from config import *
 from utils.data_loader import DataLoader
 from utils.safe_calc import SafeCalculator
 
+# Стриминг сообщений
+USE_STREAMING = True
+# Вспомогательная функция для стриминга
+def generate_draft_id():
+    """Генерирует уникальный ID для черновика сообщения."""
+    import time
+    import random
+    return int(time.time() * 1000) + random.randint(0, 999)
+
 # Установка часового пояса
 os.environ['TZ'] = TIMEZONE
 try:
@@ -278,7 +287,7 @@ def ask_g4f(prompt, user_id=None, user_name="друг"):
     except Exception as e:
         return f"❌ Ошибка: {e}"
         
-# ========== ОБРАБОТЧИК ИИ-ЧАТА ==========
+# ========== ОБРАБОТЧИК ИИ-ЧАТА С ПОДДЕРЖКОЙ СТРИМИНГА И РЕАКЦИЙ ==========
 @bot.message_handler(func=lambda message: 
     message.text and 
     (message.text.startswith('@RevisionMainBot') or 
@@ -287,14 +296,24 @@ def ask_g4f(prompt, user_id=None, user_name="друг"):
       message.text.startswith('.')))
 )
 def revision_chat(message):
-    """Обработчик ИИ-чата с поддержкой контекста через точку"""
     user_id = message.from_user.id
     user_name = message.from_user.first_name or "друг"
+    
+    # Ставим реакцию «👀» сразу, чтобы показать, что сообщение принято в обработку
+    try:
+        bot.set_message_reaction(
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            reaction=[{"type": "emoji", "emoji": "👀"}],
+            is_big=False
+        )
+    except Exception as e:
+        print(f"Reaction error (👀): {e}")
     
     # Определяем текст запроса
     if message.text.startswith('@RevisionMainBot'):
         text = message.text.replace('@RevisionMainBot', '').strip()
-        user_dialogs[user_id] = []
+        user_dialogs[user_id] = []  # Новый диалог
         revision.remember(user_id, "new_dialogue", {"user_name": user_name})
     elif message.text.startswith('.'):
         text = message.text[1:].strip()
@@ -306,14 +325,90 @@ def revision_chat(message):
         bot.reply_to(message, "❓ Напиши вопрос после @RevisionMainBot или точку и продолжение")
         return
     
-    # Ревижн тратит энергию на диалог
+    # Ревижн тратит энергию
     revision.adjust_energy(-3)
     
-    # Показываем, что думаем
-    thinking = bot.reply_to(message, "🤔 Думаю...")
+    # Определяем, нужно ли использовать стриминг
+    is_private = message.chat.type == 'private'
+    use_streaming = USE_STREAMING and is_private
     
-    # Получаем ответ
-    answer = ask_g4f(text, user_id, user_name)
+    if use_streaming:
+        # === СТРИМИНГ: ИСПОЛЬЗУЕМ SENDMESSAGEDRAFT ===
+        draft_id = generate_draft_id()
+        accumulated_text = ""
+        last_sent_text = ""
+        
+        # Отправляем первое пустое сообщение-заглушку
+        placeholder_msg = bot.send_message(message.chat.id, "…")
+        
+        try:
+            from g4f import ChatCompletion
+            
+            # Получаем историю и строим промпт
+            history = user_dialogs.get(user_id, [])
+            context = ""
+            for msg in history[-10:]:
+                context += f"{msg['role']}: {msg['text']}\n"
+            system_prompt = revision.build_prompt(text, context, user_name)
+            
+            # Выбираем модель
+            models_to_try = ["gpt-4", "gpt-3.5-turbo", "claude-3-haiku", "gemini-pro"]
+            response_generator = None
+            
+            for model in models_to_try:
+                try:
+                    response_generator = ChatCompletion.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": text}
+                        ],
+                        stream=True,
+                        timeout=15
+                    )
+                    break
+                except:
+                    continue
+            
+            if response_generator is None:
+                raise Exception("Не удалось инициализировать стриминг")
+            
+            # Обрабатываем поток токенов
+            for chunk in response_generator:
+                if chunk:
+                    accumulated_text += chunk
+                    if len(accumulated_text) - len(last_sent_text) > 3:
+                        try:
+                            bot.send_message_draft(
+                                chat_id=message.chat.id,
+                                text=accumulated_text,
+                                draft_id=draft_id
+                            )
+                            last_sent_text = accumulated_text
+                        except Exception as draft_e:
+                            print(f"Draft error: {draft_e}")
+            
+            answer = accumulated_text
+            
+        except Exception as e:
+            print(f"Streaming error: {e}, falling back to normal mode")
+            thinking = bot.reply_to(message, "🤔 Думаю...")
+            answer = ask_g4f(text, user_id, user_name)
+            bot.delete_message(chat_id=message.chat.id, message_id=thinking.message_id)
+            use_streaming = False
+        
+        if use_streaming:
+            bot.delete_message(chat_id=message.chat.id, message_id=placeholder_msg.message_id)
+            bot.reply_to(message, answer)
+            
+    else:
+        # === ОБЫЧНЫЙ РЕЖИМ (без стриминга) ===
+        thinking = bot.reply_to(message, "🤔 Думаю...")
+        answer = ask_g4f(text, user_id, user_name)
+        try:
+            bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
+        except:
+            bot.reply_to(message, answer)
     
     # Сохраняем в историю
     if user_id not in user_dialogs:
@@ -324,14 +419,20 @@ def revision_chat(message):
     if len(user_dialogs[user_id]) > 20:
         user_dialogs[user_id] = user_dialogs[user_id][-20:]
     
-    # Отправляем ответ
-    try:
-        bot.edit_message_text(answer, chat_id=message.chat.id, message_id=thinking.message_id)
-    except:
-        bot.reply_to(message, answer)
-    
-    # Запоминаем, что диалог состоялся
     revision.remember(user_id, "dialogue_complete", {"bot_response": answer[:50]})
+    
+    # Заменяем реакцию «👀» на более подходящую по контексту
+    final_emoji = choose_reaction_emoji(text)
+    if final_emoji:
+        try:
+            bot.set_message_reaction(
+                chat_id=message.chat.id,
+                message_id=message.message_id,
+                reaction=[{"type": "emoji", "emoji": final_emoji}],
+                is_big=False
+            )
+        except Exception as e:
+            print(f"Reaction error ({final_emoji}): {e}")
 
 # ========== RP-КОМАНДЫ ==========
 def get_target_name(message):
@@ -347,12 +448,29 @@ def create_rp_handler(command_name, phrase_key):
     """Создаёт обработчик для RP-команды"""
     def handler(message):
         target = get_target_name(message)
+        
+        # Получаем ID цели, если это пользователь
+        target_id = None
+        if message.reply_to_message:
+            target_id = message.reply_to_message.from_user.id
+            # Если имя не указано явно, берем из ответа
+            if target == message.reply_to_message.from_user.first_name:
+                target = f"[{target}](tg://user?id={target_id})"
+        elif len(message.text.split()) > 1:
+            # Если имя введено текстом, мы не можем знать его ID, оставляем как есть
+            pass
+            
         category = RP_PHRASES.get(phrase_key, {})
         phrases = category.get("phrases", [f"взаимодействует с {target}"])
         emoji = category.get("emoji", "✨")
         phrase = random.choice(phrases)
-        formatted = phrase.format(target=target, author=message.from_user.first_name)
-        bot.reply_to(message, f"{emoji} {message.from_user.first_name} {formatted}")
+        
+        author_name = message.from_user.first_name
+        author_id = message.from_user.id
+        author_link = f"[{author_name}](tg://user?id={author_id})"
+        
+        formatted = phrase.format(target=target, author=author_name)
+        bot.reply_to(message, f"{emoji} {author_link} {formatted}", parse_mode='Markdown')
     return handler
 
 # Регистрируем RP-команды
@@ -692,50 +810,247 @@ def cmd_choice(message):
     except:
         bot.reply_to(message, "❌ Пример: /choice чай | кофе")
 
-# ========== ПОГОДА ==========
+# ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (ПАРСИНГ) ==========
+def parse_holidays():
+    """Парсит праздники с сайтов и возвращает список"""
+    import requests
+    from bs4 import BeautifulSoup
+    import re
+    
+    all_holidays = []
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    
+    # Источник 1: calend.ru
+    try:
+        resp = requests.get("https://calend.ru", headers=headers, timeout=7)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            for block in soup.find_all(['li', 'span', 'a']):
+                text = block.get_text(strip=True)
+                if text and 5 < len(text) < 100:
+                    trash_words = ['сегодня', 'завтра', 'послезавтра', 'меню', 'главная', 'календарь', 
+                                 'праздники', 'именины', 'народный', 'хроника', 'компании', 'персоны', 
+                                 'лунный', 'производственные', '2026', '2027', '2025', 'читать', 'подробнее']
+                    if any(word in text.lower() for word in ['день', 'праздник', 'международный', 'всемирный']):
+                        if not any(trash in text.lower() for trash in trash_words):
+                            if text not in all_holidays:
+                                all_holidays.append(text)
+    except Exception as e:
+        print(f"Ошибка calend.ru: {e}")
+    
+    # Источник 2: kakoysegodnyaprazdnik.ru
+    try:
+        resp = requests.get("https://kakoysegodnyaprazdnik.ru", headers=headers, timeout=7)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            for tag in soup.find_all(['h1', 'h2', 'h3', 'span', 'li']):
+                text = tag.get_text(strip=True)
+                if text and 5 < len(text) < 100:
+                    if any(word in text.lower() for word in ['день', 'праздник', 'международный', 'всемирный']):
+                        if text not in all_holidays:
+                            all_holidays.append(text)
+    except Exception as e:
+        print(f"Ошибка kakoysegodnyaprazdnik.ru: {e}")
+    
+    # Очистка
+    clean_holidays = []
+    for h in all_holidays:
+        h = re.sub(r'^[,，\s]+|[,，\s]+$', '', h).strip()
+        if len(h) < 5:
+            continue
+        if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения', 
+                                        'где живёт ваш сайт', 'дата-центр', 'читать', 'подробнее', 
+                                        'меню', 'навигация', 'календарь', 'а также в этот день']):
+            continue
+        if re.search(r'\d{4}', h) or re.search(r'https?://', h):
+            continue
+        if h not in clean_holidays:
+            clean_holidays.append(h)
+    
+    return clean_holidays
+
+
+@bot.message_handler(commands=['holidays'])
+def cmd_holidays(message):
+    try:
+        from datetime import datetime
+        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+        
+        status_msg = bot.reply_to(message, "🔍 Собираю все праздники на сегодня...")
+        today = datetime.now()
+        
+        clean_holidays = parse_holidays()
+        
+        if not clean_holidays:
+            bot.edit_message_text("😕 Не удалось найти праздники. Попробуй позже.",
+                                 chat_id=status_msg.chat.id,
+                                 message_id=status_msg.message_id)
+            return
+        
+        # Сколько показывать сразу
+        PREVIEW_COUNT = 10
+        
+        result_text = f"🎉 <b>Праздники на {today.strftime('%d %B')}</b>\n\n"
+        
+        for i, holiday in enumerate(clean_holidays[:PREVIEW_COUNT], 1):
+            result_text += f"{i}. {holiday}\n"
+        
+        remaining = len(clean_holidays) - PREVIEW_COUNT
+        
+        markup = InlineKeyboardMarkup()
+        if remaining > 0:
+            markup.add(InlineKeyboardButton(
+                text=f"✨ Показать все (+{remaining})", 
+                callback_data="show_all_holidays"
+            ))
+        
+        bot.edit_message_text(
+            result_text,
+            chat_id=status_msg.chat.id,
+            message_id=status_msg.message_id,
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ошибка: {e}")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "show_all_holidays")
+def callback_show_all_holidays(call):
+    try:
+        from datetime import datetime
+        
+        today = datetime.now()
+        clean_holidays = parse_holidays()
+        
+        full_text = f"🎉 <b>Все праздники на {today.strftime('%d %B')}</b>\n\n"
+        for i, holiday in enumerate(clean_holidays, 1):
+            full_text += f"{i}. {holiday}\n"
+        
+        full_text += f"\n✨ <b>Всего сегодня: {len(clean_holidays)} праздников</b>"
+        
+        bot.send_message(call.message.chat.id, full_text, parse_mode='HTML')
+        bot.answer_callback_query(call.id)
+        
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"Ошибка: {e}", show_alert=True)
+
+# ========== ПОГОДА (ПОЛНАЯ С ПРОГНОЗОМ) ==========
+def get_weather_data(city_name):
+    """Получает текущую погоду и прогноз на 5 дней через OpenWeatherMap"""
+    api_key = OPENWEATHER_API_KEY
+    if not api_key:
+        return None, "❌ API ключ погоды не настроен"
+    
+    import urllib.parse
+    encoded_city = urllib.parse.quote(city_name)
+    
+    current_url = f"http://api.openweathermap.org/data/2.5/weather?q={encoded_city}&appid={api_key}&units=metric&lang=ru"
+    forecast_url = f"http://api.openweathermap.org/data/2.5/forecast?q={encoded_city}&appid={api_key}&units=metric&lang=ru"
+    
+    try:
+        import requests
+        
+        current_resp = requests.get(current_url, timeout=10)
+        if current_resp.status_code != 200:
+            if current_resp.status_code == 404:
+                return None, f"❌ Город '{city_name}' не найден"
+            return None, f"❌ Ошибка API: {current_resp.status_code}"
+        
+        current_data = current_resp.json()
+        forecast_resp = requests.get(forecast_url, timeout=10)
+        forecast_data = forecast_resp.json() if forecast_resp.status_code == 200 else None
+        
+        return (current_data, forecast_data), None
+        
+    except Exception as e:
+        return None, f"❌ Ошибка: {str(e)}"
+
+
+def format_weather_message(current, forecast, city):
+    """Форматирует погоду в красивое сообщение"""
+    from datetime import datetime
+    
+    temp = round(current['main']['temp'])
+    feels_like = round(current['main']['feels_like'])
+    humidity = current['main']['humidity']
+    wind_speed = current['wind']['speed']
+    pressure = round(current['main']['pressure'] * 0.750064)
+    
+    weather_main = current['weather'][0]['main']
+    weather_desc = current['weather'][0]['description']
+    
+    weather_emoji = {
+        'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️', 'Drizzle': '🌦️',
+        'Thunderstorm': '⛈️', 'Snow': '❄️', 'Mist': '🌫️', 'Fog': '🌫️',
+        'Smoke': '💨', 'Haze': '🌫️'
+    }.get(weather_main, '🌡️')
+    
+    now = datetime.now().strftime('%H:%M')
+    
+    text = f"<b>🌍 Погода в {city}</b>\n"
+    text += f"<i>{now} · {weather_desc.capitalize()}</i>\n\n"
+    text += f"{weather_emoji} <b>{temp}°C</b> (ощущается как {feels_like}°C)\n"
+    text += f"💧 Влажность: {humidity}%\n"
+    text += f"💨 Ветер: {wind_speed} м/с\n"
+    text += f"📊 Давление: {pressure} мм рт. ст.\n"
+    
+    if forecast:
+        text += "\n<b>📅 Прогноз на ближайшие дни:</b>\n"
+        
+        daily_forecasts = {}
+        for item in forecast['list']:
+            dt = datetime.fromtimestamp(item['dt'])
+            date_key = dt.strftime('%Y-%m-%d')
+            if date_key not in daily_forecasts:
+                daily_forecasts[date_key] = []
+            daily_forecasts[date_key].append(item)
+        
+        for i, (date_key, items) in enumerate(list(daily_forecasts.items())[:3]):
+            if i == 0:
+                day_name = "Сегодня"
+            elif i == 1:
+                day_name = "Завтра"
+            else:
+                day_name = "Послезавтра"
+            
+            temps = [item['main']['temp'] for item in items]
+            avg_temp = round(sum(temps) / len(temps))
+            max_temp = round(max(temps))
+            min_temp = round(min(temps))
+            
+            day_weather = items[len(items)//2]['weather'][0]['main']
+            day_emoji = {
+                'Clear': '☀️', 'Clouds': '☁️', 'Rain': '🌧️',
+                'Snow': '❄️', 'Thunderstorm': '⛈️'
+            }.get(day_weather, '🌡️')
+            
+            text += f"\n{day_emoji} <b>{day_name}</b>: {avg_temp}°C  (макс {max_temp}° / мин {min_temp}°)"
+    
+    return text
+
+
 @bot.message_handler(commands=['погода'])
 def cmd_weather(message):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        bot.reply_to(message, "🌍 Напиши город: /погода Омск")
+        bot.reply_to(message, "🌍 Напиши город после команды, например:\n/погода Омск\n/погода Москва\n/погода London")
         return
     
     city = parts[1].strip()
-    api_key = OPENWEATHER_API_KEY
+    bot.send_chat_action(message.chat.id, 'typing')
     
-    if not api_key:
-        bot.reply_to(message, "❌ API ключ погоды не настроен")
+    result, error = get_weather_data(city)
+    
+    if error:
+        bot.reply_to(message, error)
         return
     
-    try:
-        import requests
-        import urllib.parse
-        encoded_city = urllib.parse.quote(city)
-        url = f"http://api.openweathermap.org/data/2.5/weather?q={encoded_city}&appid={api_key}&units=metric&lang=ru"
-        
-        resp = requests.get(url, timeout=10)
-        if resp.status_code != 200:
-            bot.reply_to(message, f"❌ Город '{city}' не найден")
-            return
-        
-        data = resp.json()
-        temp = round(data['main']['temp'])
-        feels_like = round(data['main']['feels_like'])
-        humidity = data['main']['humidity']
-        wind_speed = data['wind']['speed']
-        weather_desc = data['weather'][0]['description'].capitalize()
-        
-        weather_emoji = {"Clear": "☀️", "Clouds": "☁️", "Rain": "🌧️", "Drizzle": "🌦️", "Thunderstorm": "⛈️", "Snow": "❄️", "Mist": "🌫️", "Fog": "🌫️"}.get(data['weather'][0]['main'], "🌡️")
-        
-        text = f"<b>🌍 Погода в {city}</b>\n"
-        text += f"<i>{weather_desc}</i>\n\n"
-        text += f"{weather_emoji} <b>{temp}°C</b> (ощущается как {feels_like}°C)\n"
-        text += f"💧 Влажность: {humidity}%\n"
-        text += f"💨 Ветер: {wind_speed} м/с"
-        
-        bot.reply_to(message, text, parse_mode='HTML')
-    except Exception as e:
-        bot.reply_to(message, f"❌ Ошибка: {e}")
+    current_data, forecast_data = result
+    weather_text = format_weather_message(current_data, forecast_data, city)
+    
+    bot.reply_to(message, weather_text, parse_mode='HTML')
 
 # ========== КРЕСТИКИ-НОЛИКИ ==========
 SIZES = {
@@ -1240,6 +1555,30 @@ def ping():
 # ========== ЗАПУСК МОЗГА РЕВИЖНА ==========
 revision.start_thinking(bot, CHAT_ID)
 print("🧠 Ревижн запущен и начал мыслительный процесс")
+import random
+
+def choose_reaction_emoji(message_text):
+    """Выбирает эмодзи для реакции на основе текста сообщения."""
+    text_lower = message_text.lower()
+    
+    # Приоритетные категории
+    if any(word in text_lower for word in ['спс', 'спасибо', 'благодарю', 'thank']):
+        return random.choice(['❤', '👍', '🙏'])
+    elif any(word in text_lower for word in ['привет', 'здарова', 'хай', 'hello', 'ку']):
+        return random.choice(['👋', '🤝', '😊'])
+    elif any(word in text_lower for word in ['пока', 'до встречи', 'bye']):
+        return random.choice(['👋', '😢', '🕊'])
+    elif any(word in text_lower for word in ['смех', 'ржать', 'угар', 'lol', '😂', '🤣', 'ахах']):
+        return random.choice(['🤣', '😁', '🤪'])
+    elif '?' in text_lower or any(word in text_lower for word in ['почему', 'зачем', 'как', 'что', 'где', 'когда']):
+        return '🤔'
+    elif any(word in text_lower for word in ['грустно', 'печаль', 'тоска', 'плохо']):
+        return '😢'
+    # Если ничего не подошло, с шансом 20% ставим рандомную реакцию
+    elif random.random() < 0.2:
+        return random.choice(['👍', '👀', '🔥', '💯', '🤝', '👏'])
+    else:
+        return None  # Без реакции
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
