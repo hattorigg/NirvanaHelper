@@ -191,11 +191,17 @@ def get_local_memes():
         print(f"Ошибка при получении списка мемов: {e}")
         return []
 
-# ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ (ДЛЯ ВСЕХ) ==========
+# ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ (ТОЛЬКО В ЧАТЕ) ==========
 @bot.message_handler(commands=['addmeme'])
 def cmd_addmeme(message):
-    """Добавляет новый мем и пушит в GitHub (доступно всем)"""
+    """Добавляет новый мем и пушит в GitHub (только в основном чате)"""
     
+    # Проверка, что команда используется в нужном чате
+    if message.chat.id != CHAT_ID:
+        bot.reply_to(message, "❌ Эта команда работает только в основном чате!")
+        return
+    
+    # Проверка, что это ответ на фото
     if not message.reply_to_message or not message.reply_to_message.photo:
         bot.reply_to(message, "❌ Отправь эту команду в ОТВЕТ на сообщение с картинкой!")
         return
@@ -245,6 +251,8 @@ def cmd_addmeme(message):
             message_id=status_msg.message_id,
             parse_mode="Markdown"
         )
+        
+        print(f"📸 Новый мем от {safe_name} добавлен и запушен: {filename}")
         
     except subprocess.CalledProcessError as e:
         error_msg = f"❌ Ошибка Git: {e.stderr.decode() if e.stderr else str(e)}"
