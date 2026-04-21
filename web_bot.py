@@ -90,6 +90,24 @@ def init_settings():
 
 init_settings()
 
+# ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ) ==========
+@bot.message_handler(commands=['say'])
+def cmd_say(message):
+    if message.from_user.id != CREATOR_ID:
+        bot.reply_to(message, "❌ Эта команда только для создателя")
+        return
+    
+    text = message.text[5:].strip()
+    if not text:
+        bot.reply_to(message, "❌ Напиши текст после /say")
+        return
+    
+    try:
+        bot.send_message(CHAT_ID, text)
+        bot.reply_to(message, "✅ Отправлено!")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ошибка при отправке: {e}")
+
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 def get_today_holiday():
     now = datetime.now()
@@ -1472,34 +1490,6 @@ def cmd_status(message):
         f"<i>{random.choice(comments)}</i>"
     )
     bot.reply_to(message, reply, parse_mode='HTML')
-
-# ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ) ==========
-@bot.message_handler(commands=['say'])
-def cmd_say(message):
-    print(f"🔔 Команда /say вызвана пользователем {message.from_user.id}")
-    
-    if message.from_user.id != CREATOR_ID:
-        bot.reply_to(message, f"❌ Твой ID: {message.from_user.id}\nНужен: {CREATOR_ID}")
-        return
-    
-    # Получаем текст после команды
-    text = message.text
-    if text.startswith('/say@RevisionMainBot'):
-        text = text.replace('/say@RevisionMainBot', '').strip()
-    else:
-        text = text.replace('/say', '').strip()
-    
-    if not text:
-        bot.reply_to(message, "❌ Напиши текст после /say")
-        return
-    
-    try:
-        sent = bot.send_message(CHAT_ID, text)
-        bot.reply_to(message, f"✅ Отправлено!")
-        print(f"✅ /say: {text[:50]}...")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Ошибка: {e}")
-        print(f"❌ /say error: {e}")
 
 # ========== УТРЕННИЕ И ВЕЧЕРНИЕ ПРИВЕТСТВИЯ ==========
 MORNING_PHRASES = [
