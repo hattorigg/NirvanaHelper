@@ -140,15 +140,10 @@ def get_local_memes():
         print(f"Ошибка при получении списка мемов: {e}")
         return []
 
-# ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ ==========
+# ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ (ДЛЯ ВСЕХ) ==========
 @bot.message_handler(commands=['addmeme'])
 def cmd_addmeme(message):
-    """Добавляет новый мем и пушит в GitHub"""
-    
-    # Проверка, что команда от создателя
-    if message.from_user.id != CREATOR_ID:
-        bot.reply_to(message, "❌ Только создатель может добавлять мемы!")
-        return
+    """Добавляет новый мем и пушит в GitHub (доступно всем)"""
     
     # Проверка, что это ответ на фото
     if not message.reply_to_message or not message.reply_to_message.photo:
@@ -163,9 +158,11 @@ def cmd_addmeme(message):
         file_info = bot.get_file(photo.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
-        # Генерируем имя и сохраняем
+        # Генерируем имя: кто добавил + дата
+        user_id = message.from_user.id
+        user_name = message.from_user.first_name or "user"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"meme_{timestamp}.jpg"
+        filename = f"meme_{user_name}_{timestamp}.jpg"
         filepath = os.path.join(MEME_FOLDER, filename)
         
         os.makedirs(MEME_FOLDER, exist_ok=True)
@@ -174,7 +171,7 @@ def cmd_addmeme(message):
             f.write(downloaded_file)
         
         bot.edit_message_text(
-            f"✅ Сохранён: `{filename}`\n📤 Пушу в GitHub...",
+            f"✅ Мем сохранён!\n📁 `{filename}`\n📤 Пушу в GitHub...",
             chat_id=status_msg.chat.id,
             message_id=status_msg.message_id,
             parse_mode="Markdown"
@@ -183,15 +180,19 @@ def cmd_addmeme(message):
         # Пушим в GitHub
         import subprocess
         subprocess.run(["git", "add", filepath], check=True)
-        subprocess.run(["git", "commit", "-m", f"Add meme: {filename}"], check=True)
+        subprocess.run(["git", "commit", "-m", f"Add meme from {user_name}: {filename}"], check=True)
         subprocess.run(["git", "push"], check=True)
         
         bot.edit_message_text(
-            f"✅ Мем добавлен и отправлен в GitHub!\n📁 `{filename}`\n🚀 Render начнёт деплой автоматически.",
+            f"✅ Мем от {user_name} добавлен и отправлен в GitHub!\n"
+            f"📁 `{filename}`\n"
+            f"🚀 Render начнёт деплой автоматически.",
             chat_id=status_msg.chat.id,
             message_id=status_msg.message_id,
             parse_mode="Markdown"
         )
+        
+        print(f"📸 Новый мем от {user_name} добавлен и запушен: {filename}")
         
     except Exception as e:
         bot.edit_message_text(
@@ -199,7 +200,8 @@ def cmd_addmeme(message):
             chat_id=status_msg.chat.id,
             message_id=status_msg.message_id
         )
-
+        print(f"❌ Addmeme error: {e}")
+        
 # ========== ИИ-ЧАТ (Revision) ==========
 def ask_g4f(prompt, user_id=None, user_name="друг"):
     """Отправляет запрос к g4f с учётом состояния Ревижна"""
