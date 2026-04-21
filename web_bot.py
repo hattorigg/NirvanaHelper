@@ -1474,20 +1474,22 @@ def cmd_status(message):
     bot.reply_to(message, reply, parse_mode='HTML')
 
 # ========== КОМАНДА SAY (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ) ==========
-@bot.message_handler(func=lambda message: message.text and message.text.lower().startswith('/say'))
+@bot.message_handler(commands=['say'])
 def cmd_say(message):
+    # Проверка создателя
     if message.from_user.id != CREATOR_ID:
-        bot.reply_to(message, "❌ Эта команда только для создателя")
+        bot.reply_to(message, f"❌ Твой ID: {message.from_user.id}\nID создателя: {CREATOR_ID}")
         return
     
-    text = message.text[4:].strip()
+    text = message.text[5:].strip()
     if not text:
         bot.reply_to(message, "❌ Напиши текст после /say")
         return
     
     try:
-        bot.send_message(CHAT_ID, text)
-        bot.reply_to(message, "✅ Отправлено!")
+        # Пробуем отправить
+        sent = bot.send_message(CHAT_ID, text)
+        bot.reply_to(message, f"✅ Отправлено в чат {CHAT_ID}!\nID сообщения: {sent.message_id}")
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка: {e}")
 
