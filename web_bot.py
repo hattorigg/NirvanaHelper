@@ -20,7 +20,7 @@ from utils.data_loader import DataLoader
 from utils.safe_calc import SafeCalculator
 
 # Стриминг сообщений
-USE_STREAMING = True
+USE_STREAMING = False
 # Вспомогательная функция для стриминга
 def generate_draft_id():
     """Генерирует уникальный ID для черновика сообщения."""
