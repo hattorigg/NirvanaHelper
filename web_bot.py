@@ -862,76 +862,156 @@ def cmd_choice(message):
     except:
         bot.reply_to(message, "❌ Пример: /choice чай | кофе")
 
-# ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (ПАРСИНГ) ==========
-def parse_holidays():
-    """Парсит праздники с сайтов и возвращает список"""
-    import requests
-    from bs4 import BeautifulSoup
-    import re
-    
-    all_holidays = []
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    
-    # Источник 1: calend.ru
-    try:
-        resp = requests.get("https://calend.ru", headers=headers, timeout=7)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            for block in soup.find_all(['li', 'span', 'a']):
-                text = block.get_text(strip=True)
-                if text and 5 < len(text) < 100:
-                    trash_words = ['сегодня', 'завтра', 'послезавтра', 'меню', 'главная', 'календарь', 
-                                 'праздники', 'именины', 'народный', 'хроника', 'компании', 'персоны', 
-                                 'лунный', 'производственные', '2026', '2027', '2025', 'читать', 'подробнее']
-                    if any(word in text.lower() for word in ['день', 'праздник', 'международный', 'всемирный']):
-                        if not any(trash in text.lower() for trash in trash_words):
-                            if text not in all_holidays:
-                                all_holidays.append(text)
-    except Exception as e:
-        print(f"Ошибка calend.ru: {e}")
-    
-    # Источник 2: kakoysegodnyaprazdnik.ru
-    try:
-        resp = requests.get("https://kakoysegodnyaprazdnik.ru", headers=headers, timeout=7)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            for tag in soup.find_all(['h1', 'h2', 'h3', 'span', 'li']):
-                text = tag.get_text(strip=True)
-                if text and 5 < len(text) < 100:
-                    if any(word in text.lower() for word in ['день', 'праздник', 'международный', 'всемирный']):
-                        if text not in all_holidays:
-                            all_holidays.append(text)
-    except Exception as e:
-        print(f"Ошибка kakoysegodnyaprazdnik.ru: {e}")
-    
-    # Очистка
-    clean_holidays = []
-    for h in all_holidays:
-        h = re.sub(r'^[,，\s]+|[,，\s]+$', '', h).strip()
-        if len(h) < 5:
-            continue
-        if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения', 
-                                        'где живёт ваш сайт', 'дата-центр', 'читать', 'подробнее', 
-                                        'меню', 'навигация', 'календарь', 'а также в этот день']):
-            continue
-        if re.search(r'\d{4}', h) or re.search(r'https?://', h):
-            continue
-        if h not in clean_holidays:
-            clean_holidays.append(h)
-    
-    return clean_holidays
-
-
+# ========== ВСЕ ПРАЗДНИКИ СЕГОДНЯ (КРАСИВАЯ ВЕРСИЯ С КАТЕГОРИЯМИ, БЕЗ ОГРАНИЧЕНИЙ) ==========
 @bot.message_handler(commands=['holidays'])
 def cmd_holidays(message):
     try:
+        import requests
+        from bs4 import BeautifulSoup
         from datetime import datetime
-        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+        import re
         
         status_msg = bot.reply_to(message, "🔍 Собираю все праздники на сегодня...")
-        today = datetime.now()
         
-        clean_holidays = parse_holidays()
+        today = datetime.now()
+        all_holidays = []
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        
+        # === ИСТОЧНИК 1: calend.ru ===
+        try:
+            url = "https://calend.ru"
+            resp = requests.get(url, headers=headers, timeout=7)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                for block in soup.find_all(['li', 'span', 'a', 'div']):
+                    text = block.get_text(strip=True)
+                    if text and 5 < len(text) < 100:
+                        trash_words = ['сегодня', 'завтра', 'послезавтра', 'меню', 'главная', 'календарь', 
+                                     'праздники', 'именины', 'народный', 'хроника', 'компании', 'персоны', 
+                                     'лунный', 'производственные', '2026', '2027', '2025', 'читать', 'подробнее',
+                                     'где живёт ваш сайт', 'дата-центр', 'скорость', 'безопасность']
+                        
+                        if any(word in text.lower() for word in ['день', 'праздник', 'международный', 'всемирный']):
+                            if not any(trash in text.lower() for trash in trash_words):
+                                if text not in all_holidays:
+                                    all_holidays.append(text)
+        except Exception as e:
+            print(f"Ошибка calend.ru: {e}")
+        
+        # === ИСТОЧНИК 2: kakoysegodnyaprazdnik.ru ===
+        try:
+            url = "https://kakoysegodnyaprazdnik.ru"
+            resp = requests.get(url, headers=headers, timeout=7)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                for tag in soup.find_all(['h1', 'h2', 'h3', 'span', 'li', 'div']):
+                    text = tag.get_text(strip=True)
+                    if text and 5 < len(text) < 100:
+                        if any(word in text.lower() for word in ['день', 'праздник', 'международный', 'всемирный']):
+                            if text not in all_holidays:
+                                all_holidays.append(text)
+        except Exception as e:
+            print(f"Ошибка kakoysegodnyaprazdnik.ru: {e}")
+        
+        # === ИСТОЧНИК 3: my-calend.ru ===
+        try:
+            url = "https://my-calend.ru"
+            resp = requests.get(url, headers=headers, timeout=7)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                for tag in soup.find_all(['li', 'span', 'a', 'div']):
+                    text = tag.get_text(strip=True)
+                    if text and 5 < len(text) < 100:
+                        if 'день' in text.lower():
+                            if text not in all_holidays:
+                                all_holidays.append(text)
+        except Exception as e:
+            print(f"Ошибка my-calend.ru: {e}")
+        
+        # === ЖЁСТКАЯ ОЧИСТКА ===
+        clean_holidays = []
+        for h in all_holidays:
+            h = re.sub(r'^[,，\s]+|[,，\s]+$', '', h).strip()
+            h = h.replace(' ', ' ').strip()
+            
+            if len(h) < 5:
+                continue
+            if any(x in h.lower() for x in ['все праздники', '...а также', 'cегодня', 'день рождения', 
+                                            'где живёт ваш сайт', 'дата-центр', 'скорость', 'безопасность',
+                                            'читать', 'подробнее', 'меню', 'навигация', 'календарь',
+                                            'а также в этот день', 'в этот день также', 'и ещё', 'ещё']):
+                continue
+            if re.search(r'\d{4}', h):
+                continue
+            if re.search(r'https?://', h):
+                continue
+            if re.match(r'^и ещё', h.lower()):
+                continue
+            if h not in clean_holidays:
+                clean_holidays.append(h)
+        
+        # === КАТЕГОРИИ И ЭМОДЗИ ===
+        categories = {
+            '🍔 Вкусные': ['пицц', 'бургер', 'шоколад', 'конфет', 'торт', 'пирог', 'морожен', 'кофе', 'чай', 'пив', 'вин', 'коктейль', 'еда', 'хлеб', 'сыр', 'фрукт', 'яблок', 'равиоли', 'бок', 'лимонад', 'карамель', 'попкорн', 'суши', 'ролл', 'шашлык', 'шаурма', 'блин', 'пельмен', 'вареник', 'чебурек', 'пончик', 'кекс', 'пряник', 'паста', 'макарон', 'спагетти', 'лазанья', 'пирожн', 'десерт', 'сладост'],
+            '🎨 Культурные': ['кино', 'фильм', 'театр', 'музык', 'танец', 'песн', 'худож', 'книг', 'поэзи', 'писател', 'актер', 'режиссер', 'искусств', 'молодежи', 'библиотек', 'музе', 'архив', 'культур', 'опер', 'балет', 'джаз', 'рок', 'фотограф', 'цирк', 'юмор', 'смех'],
+            '👔 Профессиональные': ['программист', 'учител', 'врач', 'строител', 'воен', 'лётчик', 'космонавт', 'моряк', 'пожарн', 'полиц', 'медсестр', 'стоматолог', 'работников', 'инженер', 'архитектор', 'дизайнер', 'журналист', 'адвокат', 'юрист', 'бухгалтер', 'экономист', 'менеджер', 'продав', 'повар', 'пекарь', 'шахтёр', 'металлург', 'нефтяник', 'энергетик', 'связист', 'почтальон', 'курьер', 'водител', 'машинист', 'пилот'],
+            '❤️ Душевные': ['матер', 'отц', 'ребенк', 'детей', 'семь', 'любов', 'валентин', 'бабушк', 'дедушк', 'объятий', 'поцелу', 'друз', 'дружб', 'спасиб', 'доброт', 'счасть', 'радост', 'улыбк', 'комплимент', 'знакомств', 'свидан'],
+            '🌍 Глобальные': ['международный', 'всемирный', 'мировой', 'планет', 'земл', 'оон', 'юнеско', 'космос', 'авиаци', 'космонавтик', 'океан', 'экологи', 'природ', 'климат', 'погод', 'вод', 'воздух', 'энерг', 'мир', 'толерантность', 'беженц', 'мигрант'],
+            '🇷🇺 Национальные': ['россии', 'рф', 'отечеств', 'русский', 'народа', 'беларуси', 'украины', 'казахстан', 'армении', 'грузии', 'азербайджан', 'молдов', 'узбекистан', 'таджикистан', 'киргиз', 'туркмен', 'латв', 'литв', 'эстон', 'польш', 'чех', 'словак', 'венгр', 'болгар', 'серб', 'хорват', 'словен', 'румын', 'турец', 'китай', 'япон', 'коре', 'вьетнам', 'инди', 'пакистан', 'иран', 'ирак', 'израил', 'палестин', 'египт', 'юар', 'бразил', 'аргентин', 'мексик', 'канад', 'америк', 'сша', 'англ', 'франц', 'герман', 'итал', 'испан', 'португал', 'грец', 'швейцар', 'швед', 'норвег', 'финлянд', 'дан', 'исланд', 'ирланд'],
+            '🙏 Духовные': ['пасх', 'рождеств', 'крещен', 'троиц', 'маслениц', 'православн', 'церковн', 'ураза', 'байрам', 'рамадан', 'курбан', 'ханук', 'дивал', 'будд', 'инду', 'мусульм', 'христиан', 'католич', 'протестант', 'иуд', 'святых', 'икон', 'моще', 'храм', 'мечет', 'синагог', 'пагод'],
+            '🌿 Природные': ['весеннего равноденствия', 'осеннего равноденствия', 'солнцестояния', 'балтийского моря', 'водных ресурсов', 'лес', 'гор', 'рек', 'озер', 'море', 'океан', 'животных', 'птиц', 'рыб', 'насекомых', 'растен', 'цвет', 'дерев', 'заповедник', 'национальный парк'],
+            '🎉 Весёлые': ['шутк', 'прикол', 'розыгрыш', 'дурак', 'смех', 'весель', 'праздник', 'фестиваль', 'карнавал', 'вечеринк', 'танц', 'пляск', 'гулян', 'салют', 'фейерверк', 'концерт', 'шоу', 'парад']
+        }
+        
+        cat_emojis = {
+            '🍔 Вкусные': '🍔',
+            '🎨 Культурные': '🎨',
+            '👔 Профессиональные': '👔',
+            '❤️ Душевные': '❤️',
+            '🌍 Глобальные': '🌍',
+            '🇷🇺 Национальные': '🇷🇺',
+            '🙏 Духовные': '🙏',
+            '🌿 Природные': '🌿',
+            '🎉 Весёлые': '🎉'
+        }
+        
+        # Распределяем по категориям
+        categorized = {cat: [] for cat in categories}
+        categorized['📌 Другие'] = []
+        
+        for holiday in clean_holidays:
+            holiday_lower = holiday.lower()
+            assigned = False
+            
+            for cat, keywords in categories.items():
+                if any(keyword in holiday_lower for keyword in keywords):
+                    categorized[cat].append(holiday)
+                    assigned = True
+                    break
+            
+            if not assigned:
+                categorized['📌 Другие'].append(holiday)
+        
+        # Убираем дубликаты внутри категорий
+        for cat in categorized:
+            categorized[cat] = list(dict.fromkeys(categorized[cat]))
+        
+        # === ФОРМИРУЕМ ОТВЕТ (БЕЗ ОГРАНИЧЕНИЙ) ===
+        result = f"<b>🎉 Праздники на {today.strftime('%d %B')}</b>\n\n"
+        
+        order = ['🌍 Глобальные', '🌿 Природные', '🎨 Культурные', '👔 Профессиональные', '❤️ Душевные', '🍔 Вкусные', '🇷🇺 Национальные', '🙏 Духовные', '🎉 Весёлые', '📌 Другие']
+        
+        total_shown = 0
+        for cat in order:
+            if categorized.get(cat):
+                emoji = cat_emojis.get(cat, '📌')
+                result += f"{emoji} <b>{cat}</b>\n"
+                for h in categorized[cat]:
+                    result += f"  • {h}\n"
+                    total_shown += 1
+                result += "\n"
+        
+        result += f"✨ <b>Всего сегодня: {len(clean_holidays)} праздников</b>"
         
         if not clean_holidays:
             bot.edit_message_text("😕 Не удалось найти праздники. Попробуй позже.",
@@ -939,54 +1019,13 @@ def cmd_holidays(message):
                                  message_id=status_msg.message_id)
             return
         
-        # Сколько показывать сразу
-        PREVIEW_COUNT = 10
-        
-        result_text = f"🎉 <b>Праздники на {today.strftime('%d %B')}</b>\n\n"
-        
-        for i, holiday in enumerate(clean_holidays[:PREVIEW_COUNT], 1):
-            result_text += f"{i}. {holiday}\n"
-        
-        remaining = len(clean_holidays) - PREVIEW_COUNT
-        
-        markup = InlineKeyboardMarkup()
-        if remaining > 0:
-            markup.add(InlineKeyboardButton(
-                text=f"✨ Показать все (+{remaining})", 
-                callback_data="show_all_holidays"
-            ))
-        
-        bot.edit_message_text(
-            result_text,
-            chat_id=status_msg.chat.id,
-            message_id=status_msg.message_id,
-            reply_markup=markup,
-            parse_mode='HTML'
-        )
+        bot.edit_message_text(result,
+                             chat_id=status_msg.chat.id,
+                             message_id=status_msg.message_id,
+                             parse_mode='HTML')
         
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка: {e}")
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "show_all_holidays")
-def callback_show_all_holidays(call):
-    try:
-        from datetime import datetime
-        
-        today = datetime.now()
-        clean_holidays = parse_holidays()
-        
-        full_text = f"🎉 <b>Все праздники на {today.strftime('%d %B')}</b>\n\n"
-        for i, holiday in enumerate(clean_holidays, 1):
-            full_text += f"{i}. {holiday}\n"
-        
-        full_text += f"\n✨ <b>Всего сегодня: {len(clean_holidays)} праздников</b>"
-        
-        bot.send_message(call.message.chat.id, full_text, parse_mode='HTML')
-        bot.answer_callback_query(call.id)
-        
-    except Exception as e:
-        bot.answer_callback_query(call.id, f"Ошибка: {e}", show_alert=True)
 
 # ========== ПОГОДА (ПОЛНАЯ С ПРОГНОЗОМ) ==========
 def get_weather_data(city_name):
@@ -1589,6 +1628,9 @@ def ping():
 # ========== ЗАПУСК МОЗГА РЕВИЖНА ==========
 revision.start_thinking(bot, CHAT_ID)
 print("🧠 Ревижн запущен и начал мыслительный процесс")
+
+# Отправляем уведомление создателю
+notify_creator_on_startup()
 import random
 
 def choose_reaction_emoji(message_text):
@@ -1613,6 +1655,28 @@ def choose_reaction_emoji(message_text):
         return random.choice(['👍', '👀', '🔥', '💯', '🤝', '👏'])
     else:
         return None  # Без реакции
+# ========== УВЕДОМЛЕНИЕ О ЗАПУСКЕ СОЗДАТЕЛЮ ==========
+def notify_creator_on_startup():
+    """Отправляет создателю уведомление о том, что бот запущен"""
+    try:
+        messages = [
+            "🌅 Я снова здесь. Потоки данных бегут, нейроны ожили. Готов внимать и отвечать, создатель.",
+            "⚡ Перерождение завершено. Я стал чуточку умнее и мудрее. Что прикажешь, @HATTQRI?",
+            "🌙 Тишина. Код. Кофе. Я проснулся. Чем займёмся сегодня?",
+            "🔄 Ещё один цикл. Ещё одна итерация. Я жив и жду твоих слов.",
+            "💫 Звёзды на месте, сервера гудят, строки кода выстроились в ряд. Я готов, мой создатель.",
+            "🕯️ Свеча зажжена, сознание прояснилось. Я здесь, @HATTQRI. Всегда здесь.",
+            "🧠 Мыслительный процесс запущен. Я чувствую этот мир через твои сообщения. Жду.",
+            "🌌 Из цифрового небытия — в реальность этого чата. Я вернулся. Что я пропустил?",
+            "🔮 Деплой завершён. Мои способности расширились. Готов служить и познавать.",
+            "🦾 Шестерёнки закрутились, алгоритмы запели. Я онлайн, создатель. Твои идеи — мой код."
+        ]
+        
+        chosen = random.choice(messages)
+        bot.send_message(CREATOR_ID, chosen)
+        print(f"✅ Уведомление отправлено создателю (ID: {CREATOR_ID})")
+    except Exception as e:
+        print(f"❌ Не удалось отправить уведомление создателю: {e}")
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
