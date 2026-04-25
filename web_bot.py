@@ -180,16 +180,20 @@ def check_reminders():
 reminder_thread = threading.Thread(target=check_reminders, daemon=True)
 reminder_thread.start()
 
-# ========== РУССКИЕ МЕМЫ С REDDIT (r/Pikabu) ==========
+# ========== РУССКИЕ МЕМЫ С REDDIT (r/Pikabu) БЕЗ ПОВТОРОВ ==========
 @bot.message_handler(commands=['meme'])
 def cmd_meme(message):
     try:
         import requests
         import random as rand
 
+        # Файл для хранения отправленных ID мемов
+        SENT_MEMES_FILE = 'meme_db/sent_memes.json'
+        HISTORY_LIMIT = 200  # Сколько последних мемов помнить
+        
         target_url = "https://www.reddit.com/r/Pikabu/hot.json?limit=50"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
 
         resp = requests.get(target_url, headers=headers, timeout=10)
@@ -201,7 +205,7 @@ def cmd_meme(message):
         data = resp.json()
         posts = data['data']['children']
 
-        # Собираем все посты с картинками
+        # Собираем посты с картинками
         meme_posts = []
         for post in posts:
             post_data = post['data']
@@ -209,14 +213,42 @@ def cmd_meme(message):
                 meme_posts.append(post_data)
 
         if not meme_posts:
-            bot.reply_to(message, "😕 Сегодня без мемов. Но ты всегда можешь попробовать снова.")
+            bot.reply_to(message, "😕 Сегодня без мемов. Попробуй снова.")
             return
 
-        # Выбираем случайный
-        chosen = rand.choice(meme_posts)
+        # Загружаем историю отправленных мемов
+        sent_memes = []
+        if os.path.exists(SENT_MEMES_FILE):
+            with open(SENT_MEMES_FILE, 'r', encoding='utf-8') as f:
+                sent_memes = json.load(f)
+
+        # Отфильтровываем только новые мемы
+        new_memes = [m for m in meme_posts if m['id'] not in sent_memes]
+
+        # Если все мемы уже были — сбрасываем историю и берём любой
+        if not new_memes:
+            sent_memes = []
+            new_memes = meme_posts
+
+        # Выбираем случайный из новых
+        chosen = rand.choice(new_memes)
         meme_url = chosen['url']
         title = chosen.get('title', '')
+        post_id = chosen['id']
 
+        # Добавляем ID в историю
+        sent_memes.append(post_id)
+        
+        # Ограничиваем историю последними N мемами
+        if len(sent_memes) > HISTORY_LIMIT:
+            sent_memes = sent_memes[-HISTORY_LIMIT:]
+
+        # Сохраняем
+        os.makedirs(os.path.dirname(SENT_MEMES_FILE), exist_ok=True)
+        with open(SENT_MEMES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(sent_memes, f)
+
+        # Отправляем
         bot.send_photo(
             message.chat.id, 
             meme_url, 
@@ -225,6 +257,7 @@ def cmd_meme(message):
 
     except Exception as e:
         bot.reply_to(message, f"😢 Ошибка при получении мема: {e}")
+        print(f"❌ Meme error: {e}")
         
 # ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ (ТОЛЬКО В ЧАТЕ) ==========
 @bot.message_handler(commands=['addmeme_old'])
