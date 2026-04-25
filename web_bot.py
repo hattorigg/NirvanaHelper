@@ -180,19 +180,51 @@ def check_reminders():
 reminder_thread = threading.Thread(target=check_reminders, daemon=True)
 reminder_thread.start()
 
-# ========== МЕМЫ ==========
-def get_local_memes():
+# ========== АВТОМАТИЧЕСКИЙ МЕМ С MEME-API (без ключей, без базы) ==========
+@bot.message_handler(commands=['meme'])
+def cmd_meme(message):
     try:
-        if not os.path.exists(MEME_FOLDER):
-            return []
-        all_files = os.listdir(MEME_FOLDER)
-        return [f for f in all_files if f.lower().endswith(ALLOWED_EXTENSIONS)]
+        import requests
+        
+        # Показываем, что ищем
+        status_msg = bot.reply_to(message, "🔍 Ищу свежий мем...")
+        
+        # Запрашиваем мем с meme-api.com (Reddit)
+        response = requests.get("https://meme-api.com/gimme", timeout=15)
+        
+        if response.status_code != 200:
+            bot.edit_message_text(
+                "😕 Не удалось получить мем. Попробуй ещё раз через секунду.",
+                chat_id=status_msg.chat.id,
+                message_id=status_msg.message_id
+            )
+            return
+        
+        data = response.json()
+        meme_url = data.get('url', '')
+        title = data.get('title', 'Без названия')
+        
+        if not meme_url:
+            bot.edit_message_text(
+                "😕 Не удалось получить мем. Попробуй ещё раз.",
+                chat_id=status_msg.chat.id,
+                message_id=status_msg.message_id
+            )
+            return
+        
+        # Удаляем сообщение "Ищу..."
+        bot.delete_message(chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+        
+        # Отправляем мем
+        caption = f"🍿 {title}" if title else "🍿 Держи свежий мем!"
+        bot.send_photo(message.chat.id, meme_url, caption=caption)
+        
     except Exception as e:
-        print(f"Ошибка при получении списка мемов: {e}")
-        return []
-
+        bot.reply_to(message, f"😢 Ошибка при получении мема: {e}")
+        print(f"❌ Meme error: {e}")
+        
 # ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ (ТОЛЬКО В ЧАТЕ) ==========
-@bot.message_handler(commands=['addmeme'])
+@bot.message_handler(commands=['addmeme_old'])
 def cmd_addmeme(message):
     """Добавляет новый мем и пушит в GitHub (только в основном чате)"""
     
