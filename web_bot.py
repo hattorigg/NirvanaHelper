@@ -180,48 +180,51 @@ def check_reminders():
 reminder_thread = threading.Thread(target=check_reminders, daemon=True)
 reminder_thread.start()
 
-# ========== АВТОМАТИЧЕСКИЙ МЕМ С MEME-API (без ключей, без базы) ==========
+# ========== РУССКИЕ МЕМЫ С REDDIT (r/Pikabu) ==========
 @bot.message_handler(commands=['meme'])
 def cmd_meme(message):
     try:
         import requests
+        import random as rand
+
+        target_url = "https://www.reddit.com/r/Pikabu/hot.json?limit=50"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        resp = requests.get(target_url, headers=headers, timeout=10)
         
-        # Показываем, что ищем
-        status_msg = bot.reply_to(message, "🔍 Ищу свежий мем...")
-        
-        # Запрашиваем мем с meme-api.com (Reddit)
-        response = requests.get("https://meme-api.com/gimme", timeout=15)
-        
-        if response.status_code != 200:
-            bot.edit_message_text(
-                "😕 Не удалось получить мем. Попробуй ещё раз через секунду.",
-                chat_id=status_msg.chat.id,
-                message_id=status_msg.message_id
-            )
+        if resp.status_code != 200:
+            bot.reply_to(message, "😕 Не удалось получить мемы с Pikabu. Попробуй позже.")
             return
-        
-        data = response.json()
-        meme_url = data.get('url', '')
-        title = data.get('title', 'Без названия')
-        
-        if not meme_url:
-            bot.edit_message_text(
-                "😕 Не удалось получить мем. Попробуй ещё раз.",
-                chat_id=status_msg.chat.id,
-                message_id=status_msg.message_id
-            )
+
+        data = resp.json()
+        posts = data['data']['children']
+
+        # Собираем все посты с картинками
+        meme_posts = []
+        for post in posts:
+            post_data = post['data']
+            if 'url' in post_data and post_data['url'].endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                meme_posts.append(post_data)
+
+        if not meme_posts:
+            bot.reply_to(message, "😕 Сегодня без мемов. Но ты всегда можешь попробовать снова.")
             return
-        
-        # Удаляем сообщение "Ищу..."
-        bot.delete_message(chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-        
-        # Отправляем мем
-        caption = f"🍿 {title}" if title else "🍿 Держи свежий мем!"
-        bot.send_photo(message.chat.id, meme_url, caption=caption)
-        
+
+        # Выбираем случайный
+        chosen = rand.choice(meme_posts)
+        meme_url = chosen['url']
+        title = chosen.get('title', '')
+
+        bot.send_photo(
+            message.chat.id, 
+            meme_url, 
+            caption=f"🍿 {title}" if title else "🍿 Держи мем с Pikabu!"
+        )
+
     except Exception as e:
         bot.reply_to(message, f"😢 Ошибка при получении мема: {e}")
-        print(f"❌ Meme error: {e}")
         
 # ========== ДОБАВЛЕНИЕ МЕМОВ С АВТО-ДЕПЛОЕМ (ТОЛЬКО В ЧАТЕ) ==========
 @bot.message_handler(commands=['addmeme_old'])
